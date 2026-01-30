@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KeyVault KGB v4.3 - Enterprise Cloud</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KeyVault KGB v4.4 - Mobile Optimized</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React y Babel -->
@@ -16,109 +16,135 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         
         :root { --font-sans: 'Inter', sans-serif; }
-        body { font-family: var(--font-sans); background-color: #F8FAFC; }
+        body { 
+            font-family: var(--font-sans); 
+            background-color: #F8FAFC; 
+            margin: 0; 
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
         
-        /* Prevenir flashes de contenido sin procesar */
-        [react-cloak] { display: none; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Animaciones suaves */
-        .fade-in { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .table-container { 
+            overflow-x: auto; 
+            scrollbar-width: thin;
+            -webkit-overflow-scrolling: touch;
+        }
         
-        /* Estilo de tablas para evitar aplastamiento */
-        .table-container { scrollbar-width: thin; }
-        .table-fixed-layout { table-layout: fixed; width: 100%; min-width: 800px; }
-        
-        /* Estilo hover para celdas */
-        .data-row:hover { background-color: rgba(241, 245, 249, 0.5); }
+        input, select, textarea { font-size: 16px !important; }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- Firebase SDK (Modular) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        // Configuración por defecto para el entorno
-        const firebaseConfig = {
-            apiKey: "", 
-            authDomain: "keyvault-kgb.firebaseapp.com",
-            projectId: "keyvault-kgb",
-            appId: "keyvault-kgb"
-        };
-
+        // Obtener configuración dinámica del entorno
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'keyvault-kgb';
         const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxS43PqEbhWpJAy0oFHE-xN8Ek2UBvyXKyVn1coXS5nWHrj-XC832Zj9VffdN9Rs6fBHw/exec";
 
         const app = initializeApp(firebaseConfig);
-        window.KGB_DB = getFirestore(app);
-        window.KGB_AUTH = getAuth(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Hacerlos globales para React
+        window.KGB_DB = db;
+        window.KGB_AUTH = auth;
         window.KGB_SHEETS_URL = SHEETS_WEBAPP_URL;
+        window.KGB_APP_ID = appId;
+        
+        // Exponer funciones necesarias
+        window.firebaseMethods = { addDoc, collection, onSnapshot, doc, deleteDoc, query, orderBy, signInAnonymously, signInWithCustomToken, onAuthStateChanged };
     </script>
 
-    <!-- App Logic (React JSX) -->
     <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
+        const { useState, useEffect } = React;
 
-        // Componente de Icono Robusto
         const Icon = ({ name, size = 18, className = "" }) => {
-            useEffect(() => { lucide.createIcons(); }, [name]);
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
             return <i data-lucide={name} style={{ width: size, height: size }} className={`inline-block ${className}`}></i>;
         };
 
         const App = () => {
             const [user, setUser] = useState(null);
             const [activeTab, setActiveTab] = useState('personal'); 
-            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             const [data, setData] = useState({ personal: [], clients: [], cameras: [] });
             const [notification, setNotification] = useState(null);
             const [showPasswordMap, setShowPasswordMap] = useState({});
-            const [onlineStatus, setOnlineStatus] = useState('online');
+            const [onlineStatus, setOnlineStatus] = useState('checking');
 
-            // --- ESTADOS DE FORMULARIO ---
             const [forms, setForms] = useState({
                 personal: { email: '', password: '' },
                 clients: { clientName: '', emailPhone: '', encryptPass: '', appPass: '', tags: '' },
                 cameras: { clientName: '', model: '', serial: '', activationCode: '', location: '', ip: '', installationDate: '', observations: '' }
             });
 
-            // Inicialización de Auth
             useEffect(() => {
-                const interval = setInterval(() => {
-                    if (window.KGB_AUTH) {
-                        signInAnonymously(window.KGB_AUTH).then(() => {
+                const initAuth = async () => {
+                    if (window.KGB_AUTH && window.firebaseMethods) {
+                        const { signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.firebaseMethods;
+                        try {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await signInWithCustomToken(window.KGB_AUTH, __initial_auth_token);
+                            } else {
+                                await signInAnonymously(window.KGB_AUTH);
+                            }
                             onAuthStateChanged(window.KGB_AUTH, (u) => {
                                 setUser(u);
-                                lucide.createIcons();
+                                if (window.lucide) window.lucide.createIcons();
+                                setOnlineStatus('online');
                             });
-                        });
-                        clearInterval(interval);
+                        } catch (e) {
+                            console.error("Auth error:", e);
+                            setOnlineStatus('offline');
+                        }
                     }
-                }, 500);
-                return () => clearInterval(interval);
+                };
+                initAuth();
             }, []);
 
-            // Escucha de Datos en Tiempo Real
             useEffect(() => {
-                if (!user || !window.KGB_DB) return;
+                if (!user || !window.KGB_DB || !window.firebaseMethods) return;
+                const { collection, onSnapshot, query, orderBy } = window.firebaseMethods;
                 const db = window.KGB_DB;
-                const path = (col) => collection(db, 'artifacts', 'keyvault-kgb', 'users', user.uid, col);
+                const appId = window.KGB_APP_ID;
                 
-                const unsubP = onSnapshot(query(path('personal'), orderBy('createdAt', 'desc')), s => setData(v => ({...v, personal: s.docs.map(d => ({id: d.id, ...d.data()}))})));
-                const unsubCl = onSnapshot(query(path('clients'), orderBy('createdAt', 'desc')), s => setData(v => ({...v, clients: s.docs.map(d => ({id: d.id, ...d.data()}))})));
-                const unsubCa = onSnapshot(query(path('cameras'), orderBy('createdAt', 'desc')), s => setData(v => ({...v, cameras: s.docs.map(d => ({id: d.id, ...d.data()}))})));
+                const path = (col) => collection(db, 'artifacts', appId, 'users', user.uid, col);
+                
+                const unsubP = onSnapshot(query(path('personal'), orderBy('createdAt', 'desc')), s => {
+                    setData(v => ({...v, personal: s.docs.map(d => ({id: d.id, ...d.data()}))}));
+                }, (err) => console.error("Firestore error:", err));
+
+                const unsubCl = onSnapshot(query(path('clients'), orderBy('createdAt', 'desc')), s => {
+                    setData(v => ({...v, clients: s.docs.map(d => ({id: d.id, ...d.data()}))}));
+                }, (err) => console.error("Firestore error:", err));
+
+                const unsubCa = onSnapshot(query(path('cameras'), orderBy('createdAt', 'desc')), s => {
+                    setData(v => ({...v, cameras: s.docs.map(d => ({id: d.id, ...d.data()}))}));
+                }, (err) => console.error("Firestore error:", err));
                 
                 return () => { unsubP(); unsubCl(); unsubCa(); };
             }, [user]);
+
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [activeTab, data, isSidebarOpen]);
 
             const showMsg = (text) => {
                 setNotification(text);
                 setTimeout(() => setNotification(null), 3000);
             };
 
-            const copy = (text) => {
+            const copyText = (text) => {
                 const el = document.createElement('textarea');
                 el.value = text;
                 document.body.appendChild(el);
@@ -131,12 +157,14 @@
             const decrypt = (val) => { try { return atob(val); } catch(e) { return val; } };
 
             const handleSave = async (type, sheetName, valuesForSheet) => {
-                if (!user) return;
+                if (!user || !window.KGB_DB) return;
+                const { addDoc, collection } = window.firebaseMethods;
                 try {
                     const timestamp = new Date().toLocaleString();
                     const collectionName = type === 'personal' ? 'personal' : type === 'clients' ? 'clients' : 'cameras';
+                    const appId = window.KGB_APP_ID;
                     
-                    await addDoc(collection(window.KGB_DB, 'artifacts', 'keyvault-kgb', 'users', user.uid, collectionName), {
+                    await addDoc(collection(window.KGB_DB, 'artifacts', appId, 'users', user.uid, collectionName), {
                         ...forms[type],
                         createdAt: new Date().toISOString()
                     });
@@ -153,205 +181,198 @@
                     const resetForms = {...forms};
                     Object.keys(resetForms[type]).forEach(k => resetForms[type][k] = '');
                     setForms(resetForms);
-                    showMsg("Guardado con éxito");
-                } catch (e) { console.error(e); }
+                    showMsg("Guardado y Sincronizado");
+                } catch (e) { showMsg("Error al guardar"); }
             };
 
             const handleDelete = async (type, id) => {
+                if (!user || !window.KGB_DB) return;
+                const { doc, deleteDoc } = window.firebaseMethods;
                 const col = type === 'personal' ? 'personal' : type === 'clients' ? 'clients' : 'cameras';
-                await deleteDoc(doc(window.KGB_DB, 'artifacts', 'keyvault-kgb', 'users', user.uid, col, id));
-                showMsg("Eliminado");
+                const appId = window.KGB_APP_ID;
+                await deleteDoc(doc(window.KGB_DB, 'artifacts', appId, 'users', user.uid, col, id));
+                showMsg("Registro eliminado");
             };
 
-            // Componente de celda de datos
-            const Cell = ({ value, sub, isPass, isCode, id, icon }) => {
+            const Cell = ({ value, sub, isPass, isCode, id, icon, color = "text-slate-800" }) => {
                 const visible = showPasswordMap[id];
-                const cleanValue = isPass ? (visible ? decrypt(value) : '••••••••••••') : value;
+                const display = isPass ? (visible ? decrypt(value) : '••••••••••••') : (value || '---');
 
                 return (
-                    <div className="flex items-start justify-between gap-2 group/cell py-1 pr-2 w-full">
+                    <div className="flex items-center justify-between gap-2 group/cell py-1 w-full bg-slate-50/50 lg:bg-transparent p-2 rounded-xl lg:p-0">
                         <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                                {icon && <Icon name={icon} size={13} className="text-blue-500 opacity-70" />}
-                                <span className={`${isPass || isCode ? 'font-mono bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200 text-slate-700' : 'text-sm font-bold text-slate-800'} truncate`}>
-                                    {cleanValue}
+                                {icon && <Icon name={icon} size={14} className="text-blue-500 shrink-0" />}
+                                <span className={`${isPass || isCode ? 'font-mono bg-white lg:bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200' : `text-sm font-bold ${color}`} truncate`}>
+                                    {display}
                                 </span>
                                 {isPass && (
-                                    <button onClick={() => setShowPasswordMap(p => ({...p, [id]: !p[id]}))} className="text-slate-400 hover:text-blue-600 transition-colors">
-                                        <Icon name={visible ? "eye-off" : "eye"} size={14} />
+                                    <button onClick={() => setShowPasswordMap(p => ({...p, [id]: !p[id]}))} className="p-1 text-slate-400 hover:text-blue-600">
+                                        <Icon name={visible ? "eye-off" : "eye"} size={16} />
                                     </button>
                                 )}
                             </div>
-                            {sub && <span className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 ml-1 tracking-tighter">{sub}</span>}
+                            {sub && <span className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 ml-1 tracking-widest">{sub}</span>}
                         </div>
-                        <button onClick={() => copy(isPass ? decrypt(value) : value)} className="opacity-0 group-hover/cell:opacity-100 p-1.5 text-slate-300 hover:text-blue-600 hover:bg-white rounded-lg transition-all">
-                            <Icon name="copy" size={13} />
+                        <button onClick={() => copyText(isPass ? decrypt(value) : value)} className="p-2 text-slate-400 hover:text-blue-600 bg-white shadow-sm border border-slate-100 rounded-lg lg:opacity-0 lg:group-hover/cell:opacity-100 transition-all">
+                            <Icon name="copy" size={14} />
                         </button>
                     </div>
                 );
             };
 
             return (
-                <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col lg:flex-row overflow-hidden">
-                    {/* Notificación Flotante */}
-                    <div className={`fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform transition-all duration-500 z-[100] border border-slate-700 ${notification ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
+                <div className="min-h-screen flex flex-col lg:flex-row bg-[#F8FAFC]">
+                    <div className={`fixed top-4 right-4 left-4 lg:left-auto lg:w-80 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform transition-all duration-500 z-[100] border border-slate-700 ${notification ? 'translate-y-0 opacity-100' : '-translate-y-20 opacity-0 pointer-events-none'}`}>
                         <Icon name="check-circle" className="text-emerald-400" />
                         <span className="text-sm font-bold tracking-tight">{notification}</span>
                     </div>
 
-                    {/* Botón Menu */}
-                    <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="fixed top-6 left-6 z-[60] bg-blue-600 text-white p-3 rounded-2xl shadow-xl hover:bg-blue-700 border border-blue-500 active:scale-95 transition-all lg:hidden">
-                        <Icon name={isSidebarOpen ? "x" : "menu"} />
-                    </button>
+                    <div className="lg:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sticky top-0 z-[60]">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-blue-600 p-1.5 rounded-lg text-white">
+                                <Icon name="shield-check" size={20} />
+                            </div>
+                            <span className="font-black text-slate-900 tracking-tighter">KeyVault <span className="text-blue-600">KGB</span></span>
+                        </div>
+                        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-600 bg-slate-100 rounded-xl">
+                            <Icon name={isSidebarOpen ? "x" : "menu"} size={24} />
+                        </button>
+                    </div>
 
-                    {/* Sidebar */}
-                    <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                    <aside className={`fixed inset-y-0 left-0 z-50 w-full lg:w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                         <div className="flex flex-col h-full pt-20 lg:pt-10 pb-8 px-6">
-                            <div className="flex items-center gap-3 mb-10 px-2">
+                            <div className="hidden lg:flex items-center gap-3 mb-10 px-2">
                                 <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-100">
                                     <Icon name="shield-check" size={24} />
                                 </div>
                                 <div>
                                     <h1 className="text-xl font-black text-slate-900 leading-none">KeyVault <span className="text-blue-600">KGB</span></h1>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1.5 tracking-widest">v4.3 FINAL</p>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1.5 tracking-widest">v4.4 MOBILE</p>
                                 </div>
                             </div>
-                            <nav className="flex-1 space-y-2">
+                            <nav className="flex-1 space-y-1">
                                 {[
                                     {id:'personal', n:'Personales', i:'mail'},
                                     {id:'clients', n:'Clientes / Apps', i:'users'},
                                     {id:'cameras', n:'Cámaras / Equipos', i:'cctv'}
                                 ].map(t => (
-                                    <button key={t.id} onClick={() => { setActiveTab(t.id); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-sm font-black transition-all ${activeTab === t.id ? 'bg-blue-50 text-blue-600 border border-blue-100 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                                    <button key={t.id} onClick={() => { setActiveTab(t.id); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-sm font-black transition-all ${activeTab === t.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}>
                                         <Icon name={t.i} /> {t.n}
                                     </button>
                                 ))}
                             </nav>
-                            <div className="mt-8 pt-8 border-t border-slate-100">
-                                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-emerald-50 border-emerald-100 text-emerald-700">
-                                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest">System Online</span>
+                            <div className="mt-auto pt-6 border-t border-slate-100">
+                                <div className={`flex items-center justify-center gap-3 px-4 py-3 rounded-2xl border ${onlineStatus === 'online' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+                                    <div className={`h-2 w-2 rounded-full ${onlineStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Cloud Sync Active</span>
                                 </div>
                             </div>
                         </div>
                     </aside>
 
-                    {/* Main Content */}
-                    <main className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarOpen ? 'lg:ml-72' : 'ml-0'} overflow-y-auto max-h-screen`}>
-                        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-6 lg:px-12 flex items-center justify-between shadow-sm">
+                    <main className={`flex-1 transition-all duration-300 lg:ml-72 overflow-y-auto`}>
+                        <header className="hidden lg:flex h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-12 items-center justify-between">
                             <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">{activeTab}</h2>
-                            <div className="flex items-center gap-3 px-5 py-2 bg-blue-600 text-white rounded-full text-[10px] font-bold shadow-lg shadow-blue-100">
-                                <Icon name="wifi" size={14} /> KGB CLOUD ACTIVE
+                            <div className="flex items-center gap-3 px-5 py-2 bg-blue-600 text-white rounded-full text-[10px] font-bold shadow-lg">
+                                <Icon name="wifi" size={14} /> KGB SYSTEM ACTIVE
                             </div>
                         </header>
 
-                        <div className="max-w-7xl mx-auto w-full px-6 lg:px-12 py-10 fade-in">
-                            {/* VISTA PERSONAL */}
-                            {activeTab === 'personal' && (
-                                <div className="grid lg:grid-cols-12 gap-10">
-                                    <div className="lg:col-span-4">
-                                        <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-xl shadow-slate-200/40 sticky top-10">
-                                            <h2 className="text-xl font-black text-slate-900 mb-6">Nuevo Acceso</h2>
-                                            <div className="space-y-4">
-                                                <input placeholder="Usuario / Correo" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.personal.email} onChange={e => setForms({...forms, personal: {...forms.personal, email: e.target.value}})} />
-                                                <input type="password" placeholder="Contraseña" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.personal.password} onChange={e => setForms({...forms, personal: {...forms.personal, password: e.target.value}})} />
-                                                <button onClick={() => handleSave('personal', 'Personales', [forms.personal.email, forms.personal.password])} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95">Guardar</button>
-                                            </div>
+                        <div className="w-full px-4 lg:px-12 py-6 lg:py-10 fade-in">
+                            <section className="mb-10">
+                                <div className="bg-white p-6 lg:p-10 rounded-[32px] lg:rounded-[48px] border border-slate-200 shadow-xl shadow-slate-200/30">
+                                    <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                                            <Icon name="plus" size={20} />
                                         </div>
+                                        Registrar Nuevo
+                                    </h2>
+                                    
+                                    {activeTab === 'personal' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <input placeholder="Usuario / Correo" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white" value={forms.personal.email} onChange={e => setForms({...forms, personal: {...forms.personal, email: e.target.value}})} />
+                                            <input type="password" placeholder="Contraseña" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white" value={forms.personal.password} onChange={e => setForms({...forms, personal: {...forms.personal, password: e.target.value}})} />
+                                            <button onClick={() => handleSave('personal', 'Personales', [forms.personal.email, forms.personal.password])} className="md:col-span-2 w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 active:scale-95 transition-all">Guardar en Cloud</button>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'clients' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <input placeholder="Nombre Cliente" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.clients.clientName} onChange={e => setForms({...forms, clients: {...forms.clients, clientName: e.target.value}})} />
+                                            <input placeholder="Email / Teléfono" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.clients.emailPhone} onChange={e => setForms({...forms, clients: {...forms.clients, emailPhone: e.target.value}})} />
+                                            <input type="password" placeholder="Password App" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.clients.appPass} onChange={e => setForms({...forms, clients: {...forms.clients, appPass: e.target.value}})} />
+                                            <button onClick={() => handleSave('clients', 'Clientes', [forms.clients.clientName, forms.clients.emailPhone, forms.clients.encryptPass, forms.clients.appPass, forms.clients.tags])} className="md:col-span-2 w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-lg active:scale-95 transition-all">Registrar Cliente</button>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'cameras' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                            <input placeholder="Cliente" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.clientName} onChange={e => setForms({...forms, cameras: {...forms.cameras, clientName: e.target.value}})} />
+                                            <input placeholder="Modelo" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.model} onChange={e => setForms({...forms, cameras: {...forms.cameras, model: e.target.value}})} />
+                                            <input placeholder="Nº de Serie" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.serial} onChange={e => setForms({...forms, cameras: {...forms.cameras, serial: e.target.value}})} />
+                                            <input placeholder="IP Local/Púb" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.ip} onChange={e => setForms({...forms, cameras: {...forms.cameras, ip: e.target.value}})} />
+                                            <input placeholder="Ubicación" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.location} onChange={e => setForms({...forms, cameras: {...forms.cameras, location: e.target.value}})} />
+                                            <input type="date" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.installationDate} onChange={e => setForms({...forms, cameras: {...forms.cameras, installationDate: e.target.value}})} />
+                                            <input placeholder="Observaciones" className="md:col-span-2 w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.observations} onChange={e => setForms({...forms, cameras: {...forms.cameras, observations: e.target.value}})} />
+                                            <button onClick={() => handleSave('cameras', 'Equipos', [forms.cameras.installationDate, forms.cameras.clientName, forms.cameras.model, forms.cameras.serial, forms.cameras.ip, forms.cameras.activationCode, forms.cameras.location, forms.cameras.observations])} className="md:col-span-2 lg:col-span-4 w-full py-5 bg-slate-900 text-white rounded-2xl font-black shadow-xl active:scale-95 transition-all">Guardar Equipo</button>
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                            <section>
+                                <div className="bg-white rounded-[32px] border border-slate-200 shadow-xl overflow-hidden">
+                                    <div className="px-6 py-6 border-b border-slate-100 bg-slate-50/50">
+                                        <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest flex items-center gap-2">
+                                            <Icon name="list" className="text-blue-600" /> Historial de Registros
+                                        </h3>
                                     </div>
-                                    <div className="lg:col-span-8 bg-white rounded-[40px] border border-slate-200 shadow-xl overflow-hidden">
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                                                    <tr><th className="px-8 py-5">Usuario</th><th className="px-8 py-5">Password</th><th className="px-8 py-5 w-20"></th></tr>
+                                    
+                                    <div className="table-container">
+                                        {activeTab === 'personal' && (
+                                            <table className="w-full text-left min-w-[500px]">
+                                                <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b">
+                                                    <tr><th className="px-6 py-4">Usuario</th><th className="px-6 py-4">Password</th><th className="px-6 py-4 text-right">Acción</th></tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {data.personal.map(item => (
-                                                        <tr key={item.id} className="data-row transition-colors group">
-                                                            <td className="px-8 py-6"><Cell value={item.email} /></td>
-                                                            <td className="px-8 py-6"><Cell value={item.password} isPass id={item.id} /></td>
-                                                            <td className="px-8 py-6 text-right"><button onClick={() => handleDelete('personal', item.id)} className="text-slate-300 hover:text-rose-600 transition-colors"><Icon name="trash-2" size={16} /></button></td>
+                                                        <tr key={item.id} className="data-row">
+                                                            <td className="px-6 py-5"><Cell value={item.email} /></td>
+                                                            <td className="px-6 py-5"><Cell value={item.password} isPass id={item.id} /></td>
+                                                            <td className="px-6 py-5 text-right"><button onClick={() => handleDelete('personal', item.id)} className="p-2 text-rose-500 bg-rose-50 rounded-xl active:scale-90"><Icon name="trash-2" size={16} /></button></td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
                                             </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                                        )}
 
-                            {/* VISTA CLIENTES */}
-                            {activeTab === 'clients' && (
-                                <div className="space-y-10">
-                                    <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-xl">
-                                        <h2 className="text-2xl font-black text-slate-900 mb-8 flex items-center gap-4"><Icon name="users" className="text-blue-600" /> Gestión de Clientes</h2>
-                                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            <input placeholder="Nombre Cliente" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.clientName} onChange={e => setForms({...forms, clients: {...forms.clients, clientName: e.target.value}})} />
-                                            <input placeholder="Email / Teléfono" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.emailPhone} onChange={e => setForms({...forms, clients: {...forms.clients, emailPhone: e.target.value}})} />
-                                            <input type="password" placeholder="Pass Cifrado" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.encryptPass} onChange={e => setForms({...forms, clients: {...forms.clients, encryptPass: e.target.value}})} />
-                                            <input type="password" placeholder="Pass App" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.appPass} onChange={e => setForms({...forms, clients: {...forms.clients, appPass: e.target.value}})} />
-                                            <input placeholder="Etiquetas" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.tags} onChange={e => setForms({...forms, clients: {...forms.clients, tags: e.target.value}})} />
-                                            <button onClick={() => handleSave('clients', 'Clientes', [forms.clients.clientName, forms.clients.emailPhone, forms.clients.encryptPass, forms.clients.appPass, forms.clients.tags])} className="w-full h-[58px] bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all">Guardar Cliente</button>
-                                        </div>
-                                    </div>
-                                    <div className="bg-white rounded-[48px] border border-slate-200 shadow-xl overflow-hidden">
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                                                    <tr><th className="px-8 py-5">Cliente</th><th className="px-8 py-5">Acceso</th><th className="px-8 py-5">App Pass</th><th className="px-8 py-5">Tags</th><th className="px-8 py-5"></th></tr>
+                                        {activeTab === 'clients' && (
+                                            <table className="w-full text-left min-w-[600px]">
+                                                <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b">
+                                                    <tr><th className="px-6 py-4">Cliente</th><th className="px-6 py-4">Acceso</th><th className="px-6 py-4">App Pass</th><th className="px-6 py-4 text-right"></th></tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {data.clients.map(item => (
-                                                        <tr key={item.id} className="data-row transition-colors">
-                                                            <td className="px-8 py-6"><Cell value={item.clientName} sub={new Date(item.createdAt).toLocaleDateString()} /></td>
-                                                            <td className="px-8 py-6"><Cell value={item.emailPhone} /></td>
-                                                            <td className="px-8 py-6"><Cell value={item.appPass} isPass id={item.id+'app'} /></td>
-                                                            <td className="px-8 py-6">
-                                                                <div className="flex flex-wrap gap-1">
-                                                                    {item.tags?.split(',').map((t, i) => t && <span key={i} className="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold border border-blue-100 uppercase tracking-tighter">{t.trim()}</span>)}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-8 py-6 text-right"><button onClick={() => handleDelete('clients', item.id)} className="text-slate-300 hover:text-rose-600 transition-colors"><Icon name="trash-2" size={16} /></button></td>
+                                                        <tr key={item.id} className="data-row">
+                                                            <td className="px-6 py-5"><Cell value={item.clientName} sub={new Date(item.createdAt).toLocaleDateString()} /></td>
+                                                            <td className="px-6 py-5"><Cell value={item.emailPhone} /></td>
+                                                            <td className="px-6 py-5"><Cell value={item.appPass} isPass id={item.id+'app'} /></td>
+                                                            <td className="px-6 py-5 text-right"><button onClick={() => handleDelete('clients', item.id)} className="p-2 text-rose-500 bg-rose-50 rounded-xl active:scale-90"><Icon name="trash-2" size={16} /></button></td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
                                             </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                                        )}
 
-                            {/* VISTA EQUIPOS */}
-                            {activeTab === 'cameras' && (
-                                <div className="space-y-10">
-                                    <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-xl">
-                                        <h2 className="text-2xl font-black text-slate-900 mb-8 flex items-center gap-4"><Icon name="cctv" className="text-blue-600" /> Registro de Equipos IP</h2>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                            <input placeholder="Cliente" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.cameras.clientName} onChange={e => setForms({...forms, cameras: {...forms.cameras, clientName: e.target.value}})} />
-                                            <input placeholder="Modelo Cámara/DVR" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.cameras.model} onChange={e => setForms({...forms, cameras: {...forms.cameras, model: e.target.value}})} />
-                                            <input placeholder="Nº de Serie" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.cameras.serial} onChange={e => setForms({...forms, cameras: {...forms.cameras, serial: e.target.value}})} />
-                                            <input placeholder="Dirección IP" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.cameras.ip} onChange={e => setForms({...forms, cameras: {...forms.cameras, ip: e.target.value}})} />
-                                            <input placeholder="Cód. Activación" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.cameras.activationCode} onChange={e => setForms({...forms, cameras: {...forms.cameras, activationCode: e.target.value}})} />
-                                            <input placeholder="Ubicación" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.cameras.location} onChange={e => setForms({...forms, cameras: {...forms.cameras, location: e.target.value}})} />
-                                            <input type="date" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm text-slate-500" value={forms.cameras.installationDate} onChange={e => setForms({...forms, cameras: {...forms.cameras, installationDate: e.target.value}})} />
-                                            <input placeholder="Observaciones" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.cameras.observations} onChange={e => setForms({...forms, cameras: {...forms.cameras, observations: e.target.value}})} />
-                                            <button onClick={() => handleSave('cameras', 'Equipos', [forms.cameras.installationDate, forms.cameras.clientName, forms.cameras.model, forms.cameras.serial, forms.cameras.ip, forms.cameras.activationCode, forms.cameras.location, forms.cameras.observations])} className="md:col-span-2 lg:col-span-4 w-full h-[52px] bg-slate-900 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all">Guardar Equipo IP</button>
-                                        </div>
-                                    </div>
-                                    <div className="bg-white rounded-[48px] border border-slate-200 shadow-xl overflow-hidden">
-                                        <div className="overflow-x-auto table-container">
-                                            <table className="table-fixed-layout text-left">
-                                                <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                                                    <tr>
-                                                        <th className="px-8 py-5 w-[25%]">Dispositivo</th>
-                                                        <th className="px-8 py-5 w-[20%]">Red y Serie</th>
-                                                        <th className="px-8 py-5 w-[35%]">Instalación / Notas</th>
-                                                        <th className="px-8 py-5 w-[10%]"></th>
-                                                    </tr>
+                                        {activeTab === 'cameras' && (
+                                            <table className="w-full text-left min-w-[900px]">
+                                                <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase border-b tracking-widest">
+                                                    <tr><th className="px-8 py-5">Equipo</th><th className="px-8 py-5">Red / Serie</th><th className="px-8 py-5">Instalación / Notas</th><th className="px-8 py-5 w-20"></th></tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {data.cameras.map(item => (
-                                                        <tr key={item.id} className="data-row transition-colors align-top">
+                                                        <tr key={item.id} className="data-row align-top">
                                                             <td className="px-8 py-6">
                                                                 <div className="font-black text-sm text-slate-900 leading-tight mb-1">{item.model}</div>
                                                                 <div className="flex items-center gap-1.5 text-[10px] text-blue-600 font-bold uppercase tracking-wider">
@@ -359,38 +380,36 @@
                                                                 </div>
                                                             </td>
                                                             <td className="px-8 py-6">
-                                                                <div className="space-y-3">
-                                                                    <Cell value={item.ip || '0.0.0.0'} sub="Dirección IP" isCode icon="globe" />
-                                                                    <Cell value={item.serial} sub="Nº de Serie" isCode icon="hash" />
+                                                                <div className="space-y-2">
+                                                                    <Cell value={item.ip || '0.0.0.0'} sub="IP Local" isCode icon="globe" />
+                                                                    <Cell value={item.serial} sub="Nº Serie" isCode icon="hash" />
                                                                 </div>
                                                             </td>
                                                             <td className="px-8 py-6">
                                                                 <div className="space-y-3">
-                                                                    <div className="flex items-center gap-4">
-                                                                        <Cell value={item.installationDate || '---'} sub="Instalación" icon="calendar" />
-                                                                        <Cell value={item.activationCode || '---'} sub="Cód. Activación" isCode icon="key" />
-                                                                    </div>
+                                                                    <Cell value={item.installationDate || '---'} sub="Instalación" icon="calendar" />
                                                                     <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
                                                                         <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1.5 mb-1"><Icon name="map-pin" size={10}/> Ubicación / Notas</span>
-                                                                        <p className="text-xs font-bold text-slate-700 leading-relaxed mb-1">{item.location || 'N/A'}</p>
-                                                                        {item.observations && <p className="text-[11px] font-medium text-slate-500 italic border-t border-slate-200 pt-1 mt-1">{item.observations}</p>}
+                                                                        <p className="text-xs font-bold text-slate-700 leading-relaxed">{item.location || 'N/A'}</p>
+                                                                        {item.observations && <p className="text-[11px] font-medium text-slate-500 italic mt-1 border-t border-slate-200 pt-1">{item.observations}</p>}
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-8 py-6 text-right">
-                                                                <button onClick={() => handleDelete('cameras', item.id)} className="p-2.5 text-slate-300 hover:text-rose-600 transition-colors"><Icon name="trash-2" size={18} /></button>
-                                                            </td>
+                                                            <td className="px-8 py-6 text-right"><button onClick={() => handleDelete('cameras', item.id)} className="p-3 text-rose-500 bg-rose-50 rounded-xl active:scale-90 transition-all"><Icon name="trash-2" size={18} /></button></td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
                                             </table>
-                                        </div>
+                                        )}
+                                        {Object.values(data).every(arr => arr.length === 0) && (
+                                            <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm">No hay registros disponibles</div>
+                                        )}
                                     </div>
                                 </div>
-                            )}
+                            </section>
                         </div>
+                        <footer className="p-8 text-slate-400 text-[10px] font-black uppercase text-center tracking-[0.4em] mt-auto">KeyVault KGB • 2026</footer>
                     </main>
-                    <footer className="fixed bottom-0 right-0 p-8 text-slate-400 text-[10px] font-black uppercase pointer-events-none tracking-[0.3em]">KeyVault KGB • 2026</footer>
                 </div>
             );
         };
