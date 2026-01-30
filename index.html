@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VaultKgb v6.1 - Refined HikConnect</title>
+    <title>VaultKgb v6.6 - Dynamic Hybrid Node</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React y Babel -->
@@ -21,7 +21,7 @@
             --accent: #3b82f6;
             --neon: #60a5fa;
             --success: #10b981;
-            --warning: #f59e0b;
+            --danger: #ef4444;
         }
 
         body { 
@@ -30,8 +30,8 @@
             color: #f1f5f9;
             margin: 0; padding: 0;
             background-image: 
-                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(30, 64, 175, 0.1) 0px, transparent 50%);
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(30, 64, 175, 0.08) 0px, transparent 50%);
             background-attachment: fixed;
             overflow: hidden; 
         }
@@ -58,12 +58,11 @@
 
         .mono { font-family: 'JetBrains Mono', monospace; }
 
-        .fade-in { animation: fadeIn 0.4s ease-out; }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         .sidebar-z { z-index: 100; }
         .header-z { z-index: 80; }
-        .notification-z { z-index: 110; }
 
         .nav-item {
             display: flex;
@@ -80,27 +79,39 @@
             background: rgba(59, 130, 246, 0.2);
             border-color: rgba(59, 130, 246, 0.5);
             color: var(--neon);
-            box-shadow: 0 0 30px rgba(59, 130, 246, 0.15);
         }
 
         .icon-box {
-            width: 42px; height: 42px;
+            width: 40px; height: 40px;
             display: flex; align-items: center; justify-content: center;
-            border-radius: 1rem; background: rgba(255, 255, 255, 0.05);
+            border-radius: 0.85rem; background: rgba(255, 255, 255, 0.03);
             margin-right: 1rem;
         }
 
-        .pulse-online { animation: pulseGreen 2s infinite; }
-        @keyframes pulseGreen { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        /* Colores dinámicos del Header */
+        .header-online { background-color: rgba(5, 150, 105, 0.9) !important; border-bottom: 2px solid #10b981; }
+        .header-offline { background-color: rgba(220, 38, 38, 0.9) !important; border-bottom: 2px solid #ef4444; }
+        .header-checking { background-color: rgba(15, 23, 42, 0.95) !important; }
 
-        ::-webkit-scrollbar { width: 5px; }
+        .pulse-white { animation: pulseW 2s infinite; }
+        @keyframes pulseW { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        
+        .custom-table { border-collapse: separate; border-spacing: 0 8px; }
+        .custom-table tr { background: rgba(255, 255, 255, 0.02); transition: all 0.2s; }
+        .custom-table tr:hover { background: rgba(59, 130, 246, 0.05); }
+        .custom-table td { padding: 1.25rem 1.5rem; }
+        .custom-table td:first-child { border-top-left-radius: 1.25rem; border-bottom-left-radius: 1.25rem; }
+        .custom-table td:last-child { border-top-right-radius: 1.25rem; border-bottom-right-radius: 1.25rem; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/javascript">
+        // URL DE TU SCRIPT DE GOOGLE
         window.KGB_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzSyOxhQgGMFunKQllbKAHdljkAacI1u9LZ4Sn6txGufigVv2clkp8B4Xa4OHTgpALlMQ/exec";
     </script>
 
@@ -116,65 +127,75 @@
             const [activeTab, setActiveTab] = useState('personal'); 
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             
+            // Estado persistente
             const [data, setData] = useState(() => {
                 const saved = localStorage.getItem('vault_kgb_v6_data');
                 return saved ? JSON.parse(saved) : { personal: [], clients: [], cameras: [] };
             });
 
+            // Cola de sincronización
             const [syncQueue, setSyncQueue] = useState(() => {
                 const saved = localStorage.getItem('vault_kgb_v6_queue');
                 return saved ? JSON.parse(saved) : [];
             });
 
             const [notification, setNotification] = useState(null);
-            const [cloudStatus, setCloudStatus] = useState('checking');
+            const [cloudStatus, setCloudStatus] = useState('checking'); // 'online', 'offline', 'checking'
             const [isLoading, setIsLoading] = useState(false);
 
             const [forms, setForms] = useState({
                 personal: { email: '', password: '' },
-                clients: { 
-                    clientName: '', 
-                    emailPhone: '', 
-                    encryptPass: '', 
-                    appPass: '', 
-                    tags: '' 
-                },
+                clients: { clientName: '', emailPhone: '', encryptPass: '', appPass: '', tags: '' },
                 cameras: { clientName: '', model: '', serial: '', activationCode: '', location: '', ip: '', installationDate: '', observations: '' }
             });
 
+            // Guardado automático
             useEffect(() => {
                 localStorage.setItem('vault_kgb_v6_data', JSON.stringify(data));
-            }, [data]);
-
-            useEffect(() => {
                 localStorage.setItem('vault_kgb_v6_queue', JSON.stringify(syncQueue));
-                if (syncQueue.length > 0 && cloudStatus === 'online') {
-                    processSyncQueue();
+            }, [data, syncQueue]);
+
+            const fetchWithRetry = async (url, options, retries = 3, backoff = 1000) => {
+                try { return await fetch(url, options); } catch (error) {
+                    if (retries > 0) {
+                        await new Promise(res => setTimeout(res, backoff));
+                        return fetchWithRetry(url, options, retries - 1, backoff * 1.5);
+                    }
+                    throw error;
                 }
-            }, [syncQueue, cloudStatus]);
+            };
 
             const processSyncQueue = async () => {
                 if (syncQueue.length === 0 || !navigator.onLine) return;
                 const item = syncQueue[0];
                 try {
-                    await fetch(window.KGB_SHEETS_URL, {
+                    await fetchWithRetry(window.KGB_SHEETS_URL, {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'text/plain' },
                         body: JSON.stringify(item)
                     });
                     setSyncQueue(prev => prev.slice(1));
-                } catch (e) {
-                    setCloudStatus('offline');
+                    setCloudStatus('online');
+                } catch (e) { 
+                    setCloudStatus('offline'); 
                 }
             };
 
+            useEffect(() => {
+                if (syncQueue.length > 0 && cloudStatus === 'online') { processSyncQueue(); }
+            }, [syncQueue, cloudStatus]);
+
+            // FUNCIÓN DE PRECARGA MAESTRA
             const fetchCloudData = async () => {
-                if (!navigator.onLine) return;
+                if (!navigator.onLine) {
+                    showMsg("Error: Nodo sin conexión a red");
+                    return;
+                }
                 setIsLoading(true);
                 setCloudStatus('checking');
                 try {
-                    const response = await fetch(window.KGB_SHEETS_URL);
+                    const response = await fetchWithRetry(window.KGB_SHEETS_URL, { method: 'GET' });
                     const result = await response.json();
                     if (result && !result.error) {
                         setData({
@@ -183,27 +204,45 @@
                             cameras: (result.cameras || []).reverse()
                         });
                         setCloudStatus('online');
-                        showMsg("Datos sincronizados");
+                        showMsg("¡Base de Datos Sincronizada!");
                     }
                 } catch (e) {
                     setCloudStatus('offline');
-                } finally {
-                    setIsLoading(false);
+                    showMsg("Fallo Crítico al descargar datos");
+                } finally { setIsLoading(false); }
+            };
+
+            // Reconexión forzada
+            const handleReconnect = async () => {
+                setCloudStatus('checking');
+                showMsg("Intentando Reconectar...");
+                try {
+                    const controller = new AbortController();
+                    const id = setTimeout(() => controller.abort(), 5000);
+                    await fetch(window.KGB_SHEETS_URL, { method: 'GET', mode: 'no-cors', signal: controller.signal });
+                    clearTimeout(id);
+                    setCloudStatus('online');
+                    showMsg("Conexión Restablecida");
+                    fetchCloudData();
+                } catch (e) {
+                    setCloudStatus('offline');
+                    showMsg("Enlace Fallido");
                 }
             };
 
             useEffect(() => {
-                const timer = setInterval(async () => {
+                const checker = setInterval(async () => {
+                    if (cloudStatus === 'checking') return;
                     try {
                         const controller = new AbortController();
-                        const id = setTimeout(() => controller.abort(), 5000);
+                        const id = setTimeout(() => controller.abort(), 4000);
                         await fetch(window.KGB_SHEETS_URL, { method: 'GET', mode: 'no-cors', signal: controller.signal });
                         clearTimeout(id);
                         setCloudStatus('online');
                     } catch (e) { setCloudStatus('offline'); }
                 }, 20000);
                 fetchCloudData();
-                return () => clearInterval(timer);
+                return () => clearInterval(checker);
             }, []);
 
             const showMsg = (text) => {
@@ -215,204 +254,283 @@
                 const timestamp = new Date().toLocaleString();
                 const newId = "loc_" + Date.now();
                 const newItem = { id: newId, ...forms[type], createdAt: new Date().toISOString() };
-
-                setData(prev => ({ 
-                    ...prev, 
-                    [type]: [newItem, ...prev[type]] 
-                }));
                 
-                const syncTask = { action: 'add', sheet: sheetName, values: [timestamp, ...valuesForSheet] };
-                setSyncQueue(prev => [...prev, syncTask]);
+                setData(prev => ({ ...prev, [type]: [newItem, ...prev[type]] }));
+                setSyncQueue(prev => [...prev, { action: 'add', sheet: sheetName, values: [timestamp, ...valuesForSheet] }]);
                 
-                showMsg("Registro guardado localmente");
-
-                const resetForms = {...forms};
-                Object.keys(resetForms[type]).forEach(k => resetForms[type][k] = '');
-                setForms(resetForms);
+                showMsg("Datos protegidos localmente. Sincronizando...");
+                setForms({...forms, [type]: Object.fromEntries(Object.keys(forms[type]).map(k => [k, '']))});
             };
 
             const handleDelete = async (type, id, sheetName, keyValue) => {
                 setData(prev => ({ ...prev, [type]: prev[type].filter(x => x.id !== id) }));
-                const deleteTask = { action: 'delete', sheet: sheetName, value: keyValue };
-                setSyncQueue(prev => [...prev, deleteTask]);
+                setSyncQueue(prev => [...prev, { action: 'delete', sheet: sheetName, value: keyValue }]);
                 showMsg("Eliminando de la nube...");
             };
 
-            const Cell = ({ value, sub, isCode, icon }) => {
-                return (
-                    <div className="flex items-center justify-between gap-3 p-4 bg-slate-900/60 rounded-2xl border border-white/5 group/cell transition-all hover:border-blue-500/30 w-full">
-                        <div className="flex flex-col min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                                {icon && <Icon name={icon} size={14} className="text-blue-400 opacity-60 shrink-0" />}
-                                <span className={`${isCode ? 'mono bg-blue-950/30 text-blue-300 px-2 py-0.5 rounded text-[11px] border border-blue-900/30' : 'text-sm font-bold text-slate-100'} truncate`}>
-                                    {value || '---'}
-                                </span>
-                            </div>
-                            {sub && <span className="text-[9px] text-slate-500 font-black uppercase mt-1 tracking-widest">{sub}</span>}
-                        </div>
-                        <button onClick={() => { navigator.clipboard.writeText(value); showMsg("Copiado"); }} className="p-2 text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg opacity-0 group-hover/cell:opacity-100 transition-all"><Icon name="copy" size={14} /></button>
+            const DataRow = ({ value, icon, mono }) => (
+                <div className="flex items-center justify-between gap-3 group/row py-0.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                        {icon && <Icon name={icon} size={14} className="opacity-60" />}
+                        <span className={`${mono ? 'mono text-[11px] bg-white/10 px-2 py-0.5 rounded border border-white/5' : 'text-sm font-bold text-white' } truncate`}>
+                            {value || '---'}
+                        </span>
                     </div>
-                );
-            };
+                    <button onClick={() => { navigator.clipboard.writeText(value); showMsg("Copiado"); }} className="opacity-0 group-hover/row:opacity-100 text-white/50 hover:text-white transition-all"><Icon name="copy" size={12}/></button>
+                </div>
+            );
+
+            const hStatusClass = cloudStatus === 'online' ? 'header-online' : cloudStatus === 'offline' ? 'header-offline' : 'header-checking';
 
             return (
                 <div className="h-screen w-screen flex flex-col lg:flex-row overflow-hidden">
                     
-                    <div className={`fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm glass border border-blue-500/40 px-6 py-4 rounded-3xl flex items-center gap-4 transform transition-all duration-500 notification-z shadow-[0_0_40px_rgba(59,130,246,0.2)] ${notification ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0 pointer-events-none'}`}>
-                        <div className={`w-2.5 h-2.5 rounded-full ${cloudStatus === 'online' ? 'bg-emerald-400 pulse-online' : 'bg-warning animate-pulse'}`}></div>
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100">{notification}</span>
+                    {/* NOTIFICACIONES */}
+                    <div className={`fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm glass border border-white/20 px-6 py-4 rounded-3xl flex items-center gap-4 transform transition-all duration-500 notification-z shadow-2xl ${notification ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0 pointer-events-none'}`}>
+                        <div className="w-2 h-2 rounded-full bg-white pulse-white"></div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">{notification}</span>
                     </div>
 
-                    <div className="lg:hidden h-20 glass border-b border-white/10 flex items-center justify-between px-6 sticky top-0 header-z">
-                        <div className="flex items-center gap-3 font-black text-xl tracking-tighter uppercase italic">Vault<span className="text-blue-500">Kgb</span></div>
+                    {/* CABECERA MÓVIL REACTIVA */}
+                    <div className={`lg:hidden h-20 glass border-b flex items-center justify-between px-6 sticky top-0 header-z shrink-0 transition-all duration-500 ${hStatusClass}`}>
+                        <div className="flex items-center gap-3 font-black text-xl tracking-tighter uppercase italic text-white">Vault<span>Kgb</span></div>
                         <div className="flex items-center gap-4">
-                            <div className={`w-3 h-3 rounded-full ${cloudStatus === 'online' ? 'bg-emerald-400 pulse-online' : 'bg-rose-500 animate-pulse'}`}></div>
-                            <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-blue-400 bg-blue-500/5 rounded-xl border border-blue-500/20"><Icon name="menu" size={28} /></button>
+                            <button onClick={handleReconnect} className="p-2 text-white bg-black/20 rounded-lg border border-white/10"><Icon name="refresh-cw" size={18} /></button>
+                            <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-white bg-white/10 rounded-xl border border-white/20"><Icon name="menu" size={24} /></button>
                         </div>
                     </div>
 
+                    {/* BARRA LATERAL */}
                     <aside className={`fixed inset-y-0 left-0 sidebar-z w-full lg:w-80 glass border-r border-white/5 transform transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                         <div className="flex flex-col h-full p-8">
-                            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden absolute top-6 right-6 p-2 text-slate-400"><Icon name="x" size={32} /></button>
-                            <div className="flex items-center gap-4 mb-16 px-2">
+                            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden absolute top-6 right-6 p-2 text-white/60 hover:text-white"><Icon name="x" size={30} /></button>
+                            <div className="flex items-center gap-4 mb-12 px-2">
                                 <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-2xl"><Icon name="shield" size={28} /></div>
-                                <div><h1 className="text-2xl font-black uppercase italic tracking-tighter leading-none">Vault<span className="text-blue-500">Kgb</span></h1><p className="text-[9px] text-blue-400 font-bold tracking-[0.4em] uppercase mt-1">LIFO Node v6.1</p></div>
+                                <div><h1 className="text-2xl font-black uppercase italic tracking-tighter">Vault<span className="text-blue-500">Kgb</span></h1><p className="text-[9px] text-blue-400 font-bold tracking-[0.4em] uppercase mt-1 italic">Enterprise Node v6.6</p></div>
                             </div>
-                            <nav className="flex-1">
+                            
+                            <nav className="flex-1 space-y-2">
                                 {[
-                                    {id:'personal', n:'Correos Personales', i:'mail', d:'Gestión de Usuario'},
-                                    {id:'clients', n:'Accesos Hikconnect', i:'shield', d:'Cuentas de la App'},
+                                    {id:'personal', n:'Correos Personales', i:'mail', d:'Acceso Privado'},
+                                    {id:'clients', n:'Accesos Hikconnect', i:'lock', d:'Cuentas de la App'},
                                     {id:'cameras', n:'Equipos DVR e IP', i:'cctv', d:'Inventario Técnico'}
                                 ].map(t => (
                                     <button key={t.id} onClick={() => { setActiveTab(t.id); setIsSidebarOpen(false); }} className={`nav-item ${activeTab === t.id ? 'nav-active' : 'text-slate-400 hover:bg-white/5'}`}>
                                         <div className="icon-box"><Icon name={t.i} size={20} /></div>
-                                        <div className="text-left min-w-0"><div className="font-black text-sm uppercase mb-0.5 truncate">{t.n}</div><div className="text-[9px] font-bold uppercase opacity-40">{t.d}</div></div>
+                                        <div className="text-left min-w-0"><div className="font-black text-sm uppercase mb-0.5 truncate">{t.n}</div><div className="text-[9px] font-bold uppercase opacity-40 italic">{t.d}</div></div>
                                     </button>
                                 ))}
                             </nav>
+
                             <div className="mt-auto pt-8 border-t border-white/5 space-y-4">
-                                {syncQueue.length > 0 && (
-                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col items-center">
-                                        <span className="text-[9px] font-black text-amber-500 uppercase italic">Pendientes: {syncQueue.length}</span>
-                                    </div>
-                                )}
-                                <div className="glass bg-black/40 border border-white/5 rounded-[2rem] p-5 text-center">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic">Sync Signal</span>
+                                <div className="glass bg-black/40 border border-white/5 rounded-[2rem] p-5">
+                                    <div className="flex items-center justify-between mb-3 px-1">
+                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic">Live Status</span>
                                         <div className={`w-2.5 h-2.5 rounded-full ${cloudStatus === 'online' ? 'bg-emerald-500 pulse-online' : 'bg-rose-500'}`}></div>
                                     </div>
-                                    <button onClick={fetchCloudData} className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600/10 border border-blue-600/30 rounded-xl text-[9px] font-black text-blue-400 uppercase hover:bg-blue-600/20 transition-all font-bold">
-                                        <Icon name="refresh-cw" size={12} className={isLoading ? "animate-spin" : ""} /> Recargar Datos
-                                    </button>
+                                    <div className="space-y-2">
+                                        <button onClick={fetchCloudData} className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-500 shadow-lg active:scale-95 transition-all">
+                                            <Icon name="database" size={14} className={isLoading ? "animate-spin" : ""} /> Precargar Datos
+                                        </button>
+                                        <button onClick={processSyncQueue} className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:bg-white/10 transition-all">
+                                            <Icon name="upload-cloud" size={14} /> Forzar Sincro ({syncQueue.length})
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </aside>
 
-                    <main className="flex-1 lg:ml-80 h-full overflow-y-auto relative scroll-smooth bg-black/20">
-                        <header className="hidden lg:flex h-28 px-12 items-center justify-between sticky top-0 glass border-b border-white/5 header-z">
-                            <div><h3 className="text-2xl font-black uppercase tracking-tighter text-white italic">{activeTab === 'personal' ? 'Correos Personales' : activeTab === 'clients' ? 'Accesos Hikconnect' : 'Equipos DVR e IP'}</h3><p className="text-[10px] font-bold text-blue-500 uppercase tracking-[0.5em] mt-1">Terminal de Orden Prioritario</p></div>
-                            <div className={`px-6 py-3 rounded-2xl border flex items-center gap-4 shadow-2xl transition-all duration-500 ${cloudStatus === 'online' ? 'bg-emerald-500/5 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/5 border-rose-500/30 text-rose-400'}`}>
-                                <Icon name={cloudStatus === 'online' ? "zap" : "wifi-off"} size={18} />
-                                <div className="flex flex-col"><span className="text-[9px] font-black uppercase opacity-60">Status</span><span className="text-[11px] font-black uppercase tracking-[0.2em]">{cloudStatus === 'online' ? 'Online' : 'Local'}</span></div>
+                    {/* MAIN VIEWPORT */}
+                    <main className="flex-1 lg:ml-80 h-full overflow-hidden relative bg-black/20 flex flex-col">
+                        
+                        {/* CABECERA ESCRITORIO REACTIVA */}
+                        <header className={`hidden lg:flex h-24 px-12 items-center justify-between sticky top-0 z-40 shrink-0 transition-all duration-700 ${hStatusClass}`}>
+                            <div className="flex items-center gap-6">
+                                <div>
+                                    <h3 className="text-2xl font-black uppercase tracking-tighter text-white italic">{activeTab === 'personal' ? 'Correos Personales' : activeTab === 'clients' ? 'Accesos Hikconnect' : 'Equipos DVR e IP'}</h3>
+                                    <p className="text-[10px] font-bold text-white/80 uppercase tracking-[0.5em] mt-1 italic">Surveillance Recovery Node Alpha-7</p>
+                                </div>
+                                <div className="h-10 w-px bg-white/20 mx-2"></div>
+                                <div className="bg-black/20 border border-white/10 px-4 py-2 rounded-xl flex items-center gap-3">
+                                    <div className="w-2 h-2 rounded-full bg-white pulse-white"></div>
+                                    <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none">
+                                        {cloudStatus === 'online' ? 'RED ONLINE • SYNC ACTIVA' : 'MODO OFFLINE • SIN SEÑAL'}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                                <button onClick={handleReconnect} className="px-5 py-2.5 bg-black/20 border border-white/10 rounded-xl flex items-center gap-3 text-white hover:bg-black/40 transition-all group shadow-xl">
+                                    <Icon name="wifi" size={16} className={cloudStatus === 'checking' ? "animate-pulse" : ""} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Reconectar</span>
+                                </button>
+                                <div className="h-8 w-px bg-white/10 mx-2"></div>
+                                <div className="bg-black/20 px-4 py-2 rounded-xl border border-white/10 text-white flex flex-col items-end">
+                                    <span className="text-[8px] font-black uppercase opacity-60">Session Code</span>
+                                    <span className="text-[10px] font-black mono tracking-widest uppercase">DIRECT-V6.6</span>
+                                </div>
                             </div>
                         </header>
 
-                        <div className="w-full px-6 lg:px-12 py-8 lg:py-12 fade-in">
+                        {/* CONTENEDOR PRINCIPAL */}
+                        <div className="flex-1 w-full max-w-6xl mx-auto px-6 lg:px-12 py-10 overflow-y-auto fade-in scroll-smooth">
                             
-                            {/* CORREO PERSONALES */}
-                            {activeTab === 'personal' && (
-                                <div className="space-y-12">
-                                    <div className="glass p-8 lg:p-12 rounded-[3rem] shadow-2xl border border-white/5">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="space-y-3">
-                                                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-[0.2em]">Correo o Usuario</label>
-                                                <input placeholder="ejemplo@correo.com" className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.personal.email} onChange={e => setForms({...forms, personal: {...forms.personal, email: e.target.value}})} />
-                                            </div>
-                                            <div className="space-y-3">
-                                                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-[0.2em]">Contraseña</label>
-                                                <input placeholder="Clave..." className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.personal.password} onChange={e => setForms({...forms, personal: {...forms.personal, password: e.target.value}})} />
-                                            </div>
-                                            <button onClick={() => handleSave('personal', 'Personales', [forms.personal.email, forms.personal.password])} className="md:col-span-2 w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black shadow-2xl uppercase tracking-[0.3em] hover:bg-blue-500 transition-all font-bold"><Icon name="save" className="mr-2" /> Guardar Registro</button>
-                                        </div>
-                                    </div>
-                                    <div className="p-6 lg:p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {data.personal.map(item => (
-                                            <div key={item.id} className="bg-slate-900/40 border border-white/5 p-6 rounded-[2.5rem] space-y-4 hover:border-blue-500/40 transition-all group/card">
-                                                <div className="flex justify-between items-start">
-                                                    <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400"><Icon name="lock" size={20} /></div>
-                                                    <button onClick={() => handleDelete('personal', item.id, 'Personales', item.email)} className="text-danger/40 hover:text-red-500 p-2 opacity-0 group-hover/card:opacity-100 transition-all"><Icon name="trash-2" size={18} /></button>
-                                                </div>
-                                                <div className="space-y-4"><Cell value={item.email} sub="Usuario / Correo" /><Cell value={item.password} sub="Clave" /></div>
-                                            </div>
-                                        ))}
-                                    </div>
+                            {isLoading ? (
+                                <div className="py-32 text-center space-y-6">
+                                    <div className="w-16 h-16 border-4 border-white/10 border-t-white rounded-full animate-spin mx-auto shadow-2xl"></div>
+                                    <div className="loading-pulse text-white/60 font-black uppercase tracking-[1em] text-[10px]">Descargando Datos...</div>
                                 </div>
-                            )}
-
-                            {/* HIKCONNECT - REFINADO */}
-                            {activeTab === 'clients' && (
-                                <div className="space-y-12">
-                                    <div className="glass p-10 lg:p-12 rounded-[3.5rem] shadow-2xl border border-white/5">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Nombre Cliente</label><input placeholder="Nombre..." className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.clientName} onChange={e => setForms({...forms, clients: {...forms.clients, clientName: e.target.value}})} /></div>
-                                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Acceso (Email/Tel)</label><input placeholder="Correo o Tel..." className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.emailPhone} onChange={e => setForms({...forms, clients: {...forms.clients, emailPhone: e.target.value}})} /></div>
-                                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Pass Cifrado</label><input placeholder="Clave Cifrada..." className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.encryptPass} onChange={e => setForms({...forms, clients: {...forms.clients, encryptPass: e.target.value}})} /></div>
-                                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Pass App</label><input placeholder="Clave App..." className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.appPass} onChange={e => setForms({...forms, clients: {...forms.clients, appPass: e.target.value}})} /></div>
-                                            <div className="space-y-2 lg:col-span-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Etiquetas</label><input placeholder="Notas o etiquetas..." className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.tags} onChange={e => setForms({...forms, clients: {...forms.clients, tags: e.target.value}})} /></div>
-                                            <button onClick={() => handleSave('clients', 'Clientes', [forms.clients.clientName, forms.clients.emailPhone, forms.clients.encryptPass, forms.clients.appPass, forms.clients.tags])} className="md:col-span-2 lg:col-span-3 w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black shadow-2xl uppercase tracking-[0.2em] hover:bg-blue-500 transition-all font-bold mt-4">Registrar HikConnect</button>
+                            ) : (
+                                <div className="space-y-12 pb-20">
+                                    
+                                    {/* PANEL PRECARGA SI NO HAY DATOS */}
+                                    {data[activeTab].length === 0 && !isLoading && (
+                                        <div className="glass p-12 rounded-[4rem] border border-blue-500/20 text-center space-y-6 animate-pulse">
+                                            <div className="w-20 h-20 bg-blue-600/10 rounded-full flex items-center justify-center mx-auto text-blue-500 border border-blue-500/30"><Icon name="cloud-download" size={40}/></div>
+                                            <div><h2 className="text-xl font-black uppercase italic tracking-widest text-white">Memoria del Nodo Desactivada</h2><p className="text-sm text-slate-400 mt-2">Sincroniza con la base central de Google Sheets para recuperar registros.</p></div>
+                                            <button onClick={fetchCloudData} className="px-10 py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase tracking-widest hover:bg-blue-500 shadow-2xl active:scale-95 transition-all">Sincronizar Todo el Vault</button>
                                         </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        {data.clients.map(item => (
-                                            <div key={item.id} className="glass p-10 rounded-[3.5rem] border border-white/5 space-y-6 group/item">
-                                                <div className="flex justify-between items-center"><h4 className="font-black text-2xl text-white uppercase italic tracking-tighter">{item.clientName}</h4><button onClick={() => handleDelete('clients', item.id, 'Clientes', item.clientName)} className="text-danger/40 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-all"><Icon name="trash-2" size={22} /></button></div>
-                                                <div className="space-y-4">
-                                                    <Cell value={item.emailPhone} sub="Acceso" icon="link" />
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                        <Cell value={item.encryptPass} sub="Pass Cifrado" icon="shield" />
-                                                        <Cell value={item.appPass} sub="Pass App" icon="lock" />
+                                    )}
+
+                                    {/* FORMULARIOS DE REGISTRO */}
+                                    <section className="glass p-8 lg:p-12 rounded-[3.5rem] shadow-2xl border border-white/5">
+                                        <div className="flex items-center gap-4 mb-10">
+                                            <div className="w-12 h-12 rounded-[1rem] bg-blue-600/10 flex items-center justify-center text-blue-400 border border-blue-500/20 shadow-xl"><Icon name="plus" size={24} /></div>
+                                            <h2 className="text-2xl font-black uppercase tracking-tight italic">Nuevo Registro Híbrido</h2>
+                                        </div>
+
+                                        {activeTab === 'personal' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Correo o Usuario</label><input placeholder="ejemplo@correo.com" className="w-full px-6 py-4 cyber-input rounded-2xl font-bold text-sm shadow-inner" value={forms.personal.email} onChange={e => setForms({...forms, personal: {...forms.personal, email: e.target.value}})} /></div>
+                                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Contraseña</label><input placeholder="Clave en texto plano..." className="w-full px-6 py-4 cyber-input rounded-2xl font-bold text-sm shadow-inner" value={forms.personal.password} onChange={e => setForms({...forms, personal: {...forms.personal, password: e.target.value}})} /></div>
+                                                <button onClick={() => handleSave('personal', 'Personales', [forms.personal.email, forms.personal.password])} className="md:col-span-2 w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-2xl uppercase tracking-[0.3em] hover:bg-blue-500 active:scale-95 transition-all flex items-center justify-center gap-4"><Icon name="save" size={20}/> Guardar Permanentemente</button>
+                                            </div>
+                                        )}
+
+                                        {activeTab === 'clients' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Nombre Cliente</label><input placeholder="Nombre local..." className="w-full px-6 py-4 cyber-input rounded-2xl font-bold text-sm shadow-inner" value={forms.clients.clientName} onChange={e => setForms({...forms, clients: {...forms.clients, clientName: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Acceso (Email/Tel)</label><input placeholder="Email o Tel..." className="w-full px-6 py-4 cyber-input rounded-2xl font-bold text-sm shadow-inner" value={forms.clients.emailPhone} onChange={e => setForms({...forms, clients: {...forms.clients, emailPhone: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Pass Cifrado</label><input placeholder="Pass cifrado..." className="w-full px-6 py-4 cyber-input rounded-2xl font-bold text-sm shadow-inner" value={forms.clients.encryptPass} onChange={e => setForms({...forms, clients: {...forms.clients, encryptPass: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Pass App</label><input placeholder="Pass aplicación..." className="w-full px-6 py-4 cyber-input rounded-2xl font-bold text-sm shadow-inner" value={forms.clients.appPass} onChange={e => setForms({...forms, clients: {...forms.clients, appPass: e.target.value}})} /></div>
+                                                <div className="space-y-1 lg:col-span-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-2">Etiquetas</label><input placeholder="Hikvision, Oficina, Notas..." className="w-full px-6 py-4 cyber-input rounded-2xl font-bold text-sm shadow-inner" value={forms.clients.tags} onChange={e => setForms({...forms, clients: {...forms.clients, tags: e.target.value}})} /></div>
+                                                <button onClick={() => handleSave('clients', 'Clientes', [forms.clients.clientName, forms.clients.emailPhone, forms.clients.encryptPass, forms.clients.appPass, forms.clients.tags])} className="md:col-span-2 lg:col-span-3 w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-2xl uppercase tracking-[0.2em] hover:bg-blue-500 transition-all font-bold mt-4">Sincronizar HikConnect</button>
+                                            </div>
+                                        )}
+
+                                        {activeTab === 'cameras' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Cliente</label><input placeholder="Nombre..." className="cyber-input px-5 py-3 rounded-xl font-bold text-sm w-full shadow-inner" value={forms.cameras.clientName} onChange={e => setForms({...forms, cameras: {...forms.cameras, clientName: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Modelo</label><input placeholder="Modelo..." className="cyber-input px-5 py-3 rounded-xl font-bold text-sm w-full shadow-inner" value={forms.cameras.model} onChange={e => setForms({...forms, cameras: {...forms.cameras, model: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Serie</label><input placeholder="Nº Serie..." className="cyber-input px-5 py-3 rounded-xl font-bold text-sm w-full shadow-inner" value={forms.cameras.serial} onChange={e => setForms({...forms, cameras: {...forms.cameras, serial: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">IP</label><input placeholder="Dirección..." className="cyber-input px-5 py-3 rounded-xl font-bold text-sm w-full shadow-inner" value={forms.cameras.ip} onChange={e => setForms({...forms, cameras: {...forms.cameras, ip: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Ubicación</label><input placeholder="Zona..." className="cyber-input px-5 py-3 rounded-xl font-bold text-sm w-full shadow-inner" value={forms.cameras.location} onChange={e => setForms({...forms, cameras: {...forms.cameras, location: e.target.value}})} /></div>
+                                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Fecha</label><input type="date" className="cyber-input px-5 py-3 rounded-xl font-bold text-sm w-full text-slate-500 shadow-inner" value={forms.cameras.installationDate} onChange={e => setForms({...forms, cameras: {...forms.cameras, installationDate: e.target.value}})} /></div>
+                                                <div className="space-y-1 md:col-span-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Notas</label><input placeholder="Detalles técnicos..." className="cyber-input px-5 py-3 rounded-xl font-bold text-sm w-full shadow-inner" value={forms.cameras.observations} onChange={e => setForms({...forms, cameras: {...forms.cameras, observations: e.target.value}})} /></div>
+                                                <button onClick={() => handleSave('cameras', 'Equipos', [forms.cameras.installationDate, forms.cameras.clientName, forms.cameras.model, forms.cameras.serial, forms.cameras.ip, forms.cameras.activationCode, forms.cameras.location, forms.cameras.observations])} className="md:col-span-2 lg:col-span-4 w-full py-5 bg-white text-slate-900 rounded-[1.25rem] font-black uppercase tracking-[0.4em] transition-all hover:bg-blue-400 hover:text-white shadow-2xl active:scale-95">Registrar Hardware en Vault</button>
+                                            </div>
+                                        )}
+                                    </section>
+
+                                    {/* LISTADO DE DATOS (HISTORIAL) */}
+                                    <section className="space-y-8">
+                                        <div className="flex items-center gap-4 px-6">
+                                            <h3 className="font-black text-white uppercase tracking-[0.4em] text-xs">Memoria Activa del Nodo</h3>
+                                            <div className="h-px flex-1 bg-white/10"></div>
+                                            <span className="text-[9px] mono text-slate-500 font-bold uppercase">{data[activeTab].length} Registros Activos</span>
+                                        </div>
+
+                                        {activeTab === 'personal' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                {data.personal.map(item => (
+                                                    <div key={item.id} className="glass p-8 rounded-[2.5rem] space-y-4 border border-white/5 group transition-all hover:border-blue-500/40">
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="w-10 h-10 rounded-2xl bg-blue-600/10 flex items-center justify-center text-blue-400 shadow-lg"><Icon name="user" size={18} /></div>
+                                                            <button onClick={() => handleDelete('personal', item.id, 'Personales', item.email)} className="text-rose-500/20 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 p-2"><Icon name="trash-2" size={18} /></button>
+                                                        </div>
+                                                        <div className="space-y-2"><DataRow value={item.email} icon="mail" /><DataRow value={item.password} icon="key" /></div>
                                                     </div>
-                                                    {item.tags && <div className="text-[11px] text-blue-400/60 mono border-t border-white/5 pt-4 uppercase italic tracking-widest font-bold">INFO: {item.tags}</div>}
-                                                </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                                        )}
 
-                            {/* EQUIPOS */}
-                            {activeTab === 'cameras' && (
-                                <div className="space-y-12">
-                                    <div className="glass p-10 rounded-[4rem] shadow-2xl border border-white/5">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                            <input placeholder="Cliente" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.clientName} onChange={e => setForms({...forms, cameras: {...forms.cameras, clientName: e.target.value}})} />
-                                            <input placeholder="Modelo" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.model} onChange={e => setForms({...forms, cameras: {...forms.cameras, model: e.target.value}})} />
-                                            <input placeholder="Nº Serie" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.serial} onChange={e => setForms({...forms, cameras: {...forms.cameras, serial: e.target.value}})} />
-                                            <input placeholder="Dirección IP" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.ip} onChange={e => setForms({...forms, cameras: {...forms.cameras, ip: e.target.value}})} />
-                                            <input placeholder="Ubicación" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.location} onChange={e => setForms({...forms, cameras: {...forms.cameras, location: e.target.value}})} />
-                                            <input type="date" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm text-slate-500" value={forms.cameras.installationDate} onChange={e => setForms({...forms, cameras: {...forms.cameras, installationDate: e.target.value}})} />
-                                            <input placeholder="Observaciones" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm md:col-span-2" value={forms.cameras.observations} onChange={e => setForms({...forms, cameras: {...forms.cameras, observations: e.target.value}})} />
-                                            <button onClick={() => handleSave('cameras', 'Equipos', [forms.cameras.installationDate, forms.cameras.clientName, forms.cameras.model, forms.cameras.serial, forms.cameras.ip, forms.cameras.activationCode, forms.cameras.location, forms.cameras.observations])} className="md:col-span-2 lg:col-span-4 w-full py-6 bg-white text-slate-900 rounded-[2rem] font-black uppercase tracking-[0.4em] transition-all hover:bg-blue-400 hover:text-white font-bold">Actualizar Mapa Técnico</button>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-8">
-                                        {data.cameras.map(item => (
-                                            <div key={item.id} className="glass p-10 rounded-[4rem] flex flex-col lg:flex-row gap-12 items-start border border-white/5 transition-all group">
-                                                <div className="lg:w-1/4">
-                                                    <h4 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-4 leading-none">{item.model}</h4>
-                                                    <div className="inline-flex items-center gap-3 bg-blue-500/10 text-blue-400 px-5 py-2 rounded-2xl text-[11px] font-black uppercase tracking-widest border border-blue-500/20"><Icon name="user" size={14} /> {item.clientName}</div>
-                                                </div>
-                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full"><Cell value={item.ip} isCode icon="globe" sub="Dirección IP" /><Cell value={item.serial} isCode icon="hash" sub="Nº de Serie" /><Cell value={item.installationDate} icon="calendar" sub="Alta Sistema" /><Cell value={item.location} icon="map-pin" sub="Despliegue" /></div>
-                                                {item.observations && <div className="lg:w-1/4 bg-blue-950/20 p-6 rounded-[2.5rem] border border-blue-900/30 text-[13px] text-slate-300 italic leading-relaxed">{item.observations}</div>}
-                                                <button onClick={() => handleDelete('cameras', item.id, 'Equipos', item.serial)} className="p-4 text-rose-500/30 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all self-center lg:self-start"><Icon name="trash-2" size={24} /></button>
+                                        {activeTab === 'clients' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                {data.clients.map(item => (
+                                                    <div key={item.id} className="glass p-10 rounded-[3rem] border border-white/5 space-y-6 group transition-all hover:border-blue-500/30">
+                                                        <div className="flex justify-between items-center"><h4 className="font-black text-2xl text-white uppercase italic truncate pr-4">{item.clientName}</h4><button onClick={() => handleDelete('clients', item.id, 'Clientes', item.clientName)} className="text-rose-500/30 hover:text-rose-500 p-2 opacity-0 group-hover:opacity-100 transition-all"><Icon name="trash-2" size={22} /></button></div>
+                                                        <div className="grid grid-cols-1 gap-4">
+                                                            <DataRow value={item.emailPhone} icon="link" />
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                                <DataRow value={item.encryptPass} icon="shield" mono />
+                                                                <DataRow value={item.appPass} icon="smartphone" mono />
+                                                            </div>
+                                                            {item.tags && <div className="text-[10px] text-blue-400/50 mono border-t border-white/5 pt-4 italic truncate uppercase tracking-widest">Etiquetas: {item.tags}</div>}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
+                                        )}
+
+                                        {activeTab === 'cameras' && (
+                                            <div className="glass rounded-[3.5rem] overflow-hidden border border-white/5 shadow-2xl">
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left custom-table px-4">
+                                                        <thead className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 border-b border-white/5 bg-black/20">
+                                                            <tr>
+                                                                <th className="px-8 py-6">Entidad / Modelo</th>
+                                                                <th className="px-8 py-6">Identificadores</th>
+                                                                <th className="px-8 py-6">Instalación</th>
+                                                                <th className="px-8 py-6">Notas Técnicas</th>
+                                                                <th className="px-8 py-6 w-16"></th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y-8 divide-transparent">
+                                                            {data.cameras.map(item => (
+                                                                <tr key={item.id} className="group/row transition-all duration-300">
+                                                                    <td>
+                                                                        <div className="flex flex-col gap-1 min-w-[180px]">
+                                                                            <span className="text-sm font-black text-white uppercase italic leading-none">{item.clientName}</span>
+                                                                            <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mt-1 opacity-60">{item.model}</span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div className="space-y-1.5 min-w-[200px]">
+                                                                            <DataRow value={item.serial} icon="hash" mono />
+                                                                            <DataRow value={item.ip} icon="globe" mono />
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div className="space-y-1.5 min-w-[150px]">
+                                                                            <DataRow value={item.location} icon="map-pin" />
+                                                                            <DataRow value={item.installationDate} icon="calendar" />
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div className="max-w-[220px]">
+                                                                            <p className="text-[11px] text-slate-400 leading-relaxed italic line-clamp-3 hover:line-clamp-none transition-all duration-300 group-hover/row:text-slate-200">
+                                                                                {item.observations || 'N/A'}
+                                                                            </p>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="text-right">
+                                                                        <button onClick={() => handleDelete('cameras', item.id, 'Equipos', item.serial)} className="p-3 text-rose-500/20 hover:text-rose-500 hover:bg-rose-500/10 rounded-2xl transition-all opacity-0 group-hover/row:opacity-100">
+                                                                            <Icon name="trash-2" size={20} />
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </section>
                                 </div>
                             )}
                         </div>
-                        <footer className="p-20 text-slate-800 text-[10px] font-black uppercase text-center tracking-[1.5em] opacity-20 italic">VaultKgb Hybrid Node Recovery • 2026</footer>
+                        <footer className="p-10 text-slate-800 text-[10px] font-black uppercase text-center tracking-[1.5em] opacity-20 italic shrink-0 pointer-events-none">VaultKgb Security Recovery Node Alpha-7</footer>
                     </main>
                 </div>
             );
