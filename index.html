@@ -3,86 +3,147 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KeyVault KGB v4.4 - Mobile Optimized</title>
-    <!-- Tailwind CSS -->
+    <title>VaultKgb v5.2 - Smart Sync Offline</title>
+    <!-- Tailwind CSS para el diseño base -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React y Babel -->
+    <!-- React y Babel para la lógica de interfaz -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Lucide Icons -->
+    <!-- Lucide Icons para la iconografía tecnológica -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
         
-        :root { --font-sans: 'Inter', sans-serif; }
+        :root { 
+            --bg-dark: #020617;
+            --card-bg: rgba(15, 23, 42, 0.85);
+            --accent: #3b82f6;
+            --neon: #60a5fa;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
         body { 
-            font-family: var(--font-sans); 
-            background-color: #F8FAFC; 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: var(--bg-dark);
+            color: #f1f5f9;
             margin: 0; 
             padding: 0;
-            -webkit-tap-highlight-color: transparent;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(30, 64, 175, 0.08) 0px, transparent 50%);
+            background-attachment: fixed;
+            overflow: hidden; 
         }
         
-        .fade-in { animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        .table-container { 
-            overflow-x: auto; 
-            scrollbar-width: thin;
-            -webkit-overflow-scrolling: touch;
+        /* Estilo Glassmorphism */
+        .glass {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        
-        input, select, textarea { font-size: 16px !important; }
 
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+        /* Inputs Estilo Terminal */
+        .cyber-input {
+            background: rgba(2, 6, 23, 0.9);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            color: #f1f5f9;
+            transition: all 0.3s ease;
+        }
+
+        .cyber-input:focus {
+            border-color: var(--neon);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+            outline: none;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Manejo de Capas (Z-Index) */
+        .sidebar-z { z-index: 100; }
+        .header-z { z-index: 80; }
+        .notification-z { z-index: 110; }
+
+        /* Items de Navegación */
+        .nav-item {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 1rem 1.25rem;
+            border-radius: 1.25rem;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .nav-active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.4);
+            color: var(--neon);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.1);
+        }
+
+        .nav-active .icon-box {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+
+        .icon-box {
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.85rem;
+            background: rgba(255, 255, 255, 0.03);
+            margin-right: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+
+        .loading-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-
-        // Obtener configuración dinámica del entorno
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'keyvault-kgb';
-        const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxS43PqEbhWpJAy0oFHE-xN8Ek2UBvyXKyVn1coXS5nWHrj-XC832Zj9VffdN9Rs6fBHw/exec";
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // Hacerlos globales para React
-        window.KGB_DB = db;
-        window.KGB_AUTH = auth;
-        window.KGB_SHEETS_URL = SHEETS_WEBAPP_URL;
-        window.KGB_APP_ID = appId;
-        
-        // Exponer funciones necesarias
-        window.firebaseMethods = { addDoc, collection, onSnapshot, doc, deleteDoc, query, orderBy, signInAnonymously, signInWithCustomToken, onAuthStateChanged };
+    <script type="text/javascript">
+        // CONFIGURACIÓN DE CONEXIÓN A GOOGLE SHEETS
+        window.KGB_SHEETS_URL = "https://script.google.com/macros/s/AKfycby39HGe4fvnQFwKNGjzaCMsv4P9hM1KjFbqZj8tp5LQJdynyfZnIYOfTJE2FJJvp3lcUA/exec";
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         const Icon = ({ name, size = 18, className = "" }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={`inline-block ${className}`}></i>;
+            return <i data-lucide={name} style={{ width: size, height: size }} className={`shrink-0 ${className}`}></i>;
         };
 
         const App = () => {
-            const [user, setUser] = useState(null);
             const [activeTab, setActiveTab] = useState('personal'); 
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-            const [data, setData] = useState({ personal: [], clients: [], cameras: [] });
+            const [data, setData] = useState(() => {
+                const local = localStorage.getItem('vault_kgb_data');
+                return local ? JSON.parse(local) : { personal: [], clients: [], cameras: [] };
+            });
+            const [pendingSync, setPendingSync] = useState(() => {
+                const pending = localStorage.getItem('vault_kgb_pending');
+                return pending ? JSON.parse(pending) : [];
+            });
             const [notification, setNotification] = useState(null);
             const [showPasswordMap, setShowPasswordMap] = useState({});
-            const [onlineStatus, setOnlineStatus] = useState('checking');
+            const [cloudStatus, setCloudStatus] = useState(navigator.onLine ? 'checking' : 'offline');
+            const [isLoading, setIsLoading] = useState(false);
 
             const [forms, setForms] = useState({
                 personal: { email: '', password: '' },
@@ -90,325 +151,408 @@
                 cameras: { clientName: '', model: '', serial: '', activationCode: '', location: '', ip: '', installationDate: '', observations: '' }
             });
 
+            // Persistir datos locales cada vez que cambien
             useEffect(() => {
-                const initAuth = async () => {
-                    if (window.KGB_AUTH && window.firebaseMethods) {
-                        const { signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.firebaseMethods;
-                        try {
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await signInWithCustomToken(window.KGB_AUTH, __initial_auth_token);
-                            } else {
-                                await signInAnonymously(window.KGB_AUTH);
-                            }
-                            onAuthStateChanged(window.KGB_AUTH, (u) => {
-                                setUser(u);
-                                if (window.lucide) window.lucide.createIcons();
-                                setOnlineStatus('online');
-                            });
-                        } catch (e) {
-                            console.error("Auth error:", e);
-                            setOnlineStatus('offline');
-                        }
+                localStorage.setItem('vault_kgb_data', JSON.stringify(data));
+            }, [data]);
+
+            useEffect(() => {
+                localStorage.setItem('vault_kgb_pending', JSON.stringify(pendingSync));
+            }, [pendingSync]);
+
+            // Función para sincronizar la cola pendiente
+            const syncQueue = async () => {
+                if (!navigator.onLine || pendingSync.length === 0) return;
+                
+                const queue = [...pendingSync];
+                let successCount = 0;
+
+                for (let i = 0; i < queue.length; i++) {
+                    const item = queue[i];
+                    try {
+                        await fetch(window.KGB_SHEETS_URL, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'text/plain' },
+                            body: JSON.stringify({ sheet: item.sheet, values: item.values })
+                        });
+                        successCount++;
+                    } catch (e) {
+                        console.error("Fallo de sincronización individual", e);
+                        break; // Detener si hay error de red
                     }
+                }
+
+                if (successCount > 0) {
+                    setPendingSync(prev => prev.slice(successCount));
+                    showMsg(`Sincronizados ${successCount} registros pendientes`);
+                    fetchCloudData(); // Refrescar para asegurar integridad
+                }
+            };
+
+            // Intentar sincronizar cuando vuelve el internet
+            useEffect(() => {
+                const handleOnline = () => {
+                    setCloudStatus('checking');
+                    syncQueue();
                 };
-                initAuth();
+                const handleOffline = () => setCloudStatus('offline');
+
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
+                
+                // Intervalo de seguridad para reintentar sincronización
+                const syncInterval = setInterval(syncQueue, 30000);
+
+                return () => {
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                    clearInterval(syncInterval);
+                };
+            }, [pendingSync]);
+
+            const fetchCloudData = async () => {
+                if (!navigator.onLine) {
+                    setCloudStatus('offline');
+                    return;
+                }
+                setCloudStatus('checking');
+                setIsLoading(true);
+                try {
+                    const response = await fetch(window.KGB_SHEETS_URL);
+                    const result = await response.json();
+                    
+                    if (result && !result.error) {
+                        setData({
+                            personal: result.personal || [],
+                            clients: result.clients || [],
+                            cameras: result.cameras || []
+                        });
+                        setCloudStatus('online');
+                    }
+                } catch (e) {
+                    setCloudStatus('offline');
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                fetchCloudData();
             }, []);
 
-            useEffect(() => {
-                if (!user || !window.KGB_DB || !window.firebaseMethods) return;
-                const { collection, onSnapshot, query, orderBy } = window.firebaseMethods;
-                const db = window.KGB_DB;
-                const appId = window.KGB_APP_ID;
-                
-                const path = (col) => collection(db, 'artifacts', appId, 'users', user.uid, col);
-                
-                const unsubP = onSnapshot(query(path('personal'), orderBy('createdAt', 'desc')), s => {
-                    setData(v => ({...v, personal: s.docs.map(d => ({id: d.id, ...d.data()}))}));
-                }, (err) => console.error("Firestore error:", err));
-
-                const unsubCl = onSnapshot(query(path('clients'), orderBy('createdAt', 'desc')), s => {
-                    setData(v => ({...v, clients: s.docs.map(d => ({id: d.id, ...d.data()}))}));
-                }, (err) => console.error("Firestore error:", err));
-
-                const unsubCa = onSnapshot(query(path('cameras'), orderBy('createdAt', 'desc')), s => {
-                    setData(v => ({...v, cameras: s.docs.map(d => ({id: d.id, ...d.data()}))}));
-                }, (err) => console.error("Firestore error:", err));
-                
-                return () => { unsubP(); unsubCl(); unsubCa(); };
-            }, [user]);
-
-            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [activeTab, data, isSidebarOpen]);
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [activeTab, data, isSidebarOpen, isLoading]);
 
             const showMsg = (text) => {
                 setNotification(text);
-                setTimeout(() => setNotification(null), 3000);
-            };
-
-            const copyText = (text) => {
-                const el = document.createElement('textarea');
-                el.value = text;
-                document.body.appendChild(el);
-                el.select();
-                document.execCommand('copy');
-                document.body.removeChild(el);
-                showMsg("Copiado al portapapeles");
+                setTimeout(() => setNotification(null), 4000);
             };
 
             const decrypt = (val) => { try { return atob(val); } catch(e) { return val; } };
 
             const handleSave = async (type, sheetName, valuesForSheet) => {
-                if (!user || !window.KGB_DB) return;
-                const { addDoc, collection } = window.firebaseMethods;
-                try {
-                    const timestamp = new Date().toLocaleString();
-                    const collectionName = type === 'personal' ? 'personal' : type === 'clients' ? 'clients' : 'cameras';
-                    const appId = window.KGB_APP_ID;
-                    
-                    await addDoc(collection(window.KGB_DB, 'artifacts', appId, 'users', user.uid, collectionName), {
-                        ...forms[type],
-                        createdAt: new Date().toISOString()
-                    });
+                const timestamp = new Date().toLocaleString();
+                const newId = "local_" + Date.now();
+                const newItem = { id: newId, ...forms[type], createdAt: new Date().toISOString() };
 
-                    if (window.KGB_SHEETS_URL) {
-                        fetch(window.KGB_SHEETS_URL, {
+                // 1. Guardar localmente de inmediato para que el usuario lo vea
+                setData(prev => ({ ...prev, [type]: [newItem, ...prev[type]] }));
+                
+                // 2. Añadir a la cola de pendientes
+                const syncItem = { sheet: sheetName, values: [timestamp, ...valuesForSheet] };
+                setPendingSync(prev => [...prev, syncItem]);
+
+                showMsg("Guardado Localmente. Sincronizando...");
+
+                // 3. Intentar envío inmediato
+                if (navigator.onLine) {
+                    try {
+                        await fetch(window.KGB_SHEETS_URL, {
                             method: 'POST',
                             mode: 'no-cors',
                             headers: { 'Content-Type': 'text/plain' },
-                            body: JSON.stringify({ sheet: sheetName, values: [timestamp, ...valuesForSheet] })
+                            body: JSON.stringify(syncItem)
                         });
+                        // Si no falló el fetch, lo quitamos de pendientes
+                        setPendingSync(prev => prev.filter(p => p !== syncItem));
+                        setCloudStatus('online');
+                        showMsg("Sincronización Exitosa con Sheets");
+                    } catch (e) {
+                        setCloudStatus('offline');
                     }
+                }
 
-                    const resetForms = {...forms};
-                    Object.keys(resetForms[type]).forEach(k => resetForms[type][k] = '');
-                    setForms(resetForms);
-                    showMsg("Guardado y Sincronizado");
-                } catch (e) { showMsg("Error al guardar"); }
+                const resetForms = {...forms};
+                Object.keys(resetForms[type]).forEach(k => resetForms[type][k] = '');
+                setForms(resetForms);
             };
 
-            const handleDelete = async (type, id) => {
-                if (!user || !window.KGB_DB) return;
-                const { doc, deleteDoc } = window.firebaseMethods;
-                const col = type === 'personal' ? 'personal' : type === 'clients' ? 'clients' : 'cameras';
-                const appId = window.KGB_APP_ID;
-                await deleteDoc(doc(window.KGB_DB, 'artifacts', appId, 'users', user.uid, col, id));
-                showMsg("Registro eliminado");
-            };
-
-            const Cell = ({ value, sub, isPass, isCode, id, icon, color = "text-slate-800" }) => {
+            const Cell = ({ value, sub, isPass, isCode, id, icon }) => {
                 const visible = showPasswordMap[id];
                 const display = isPass ? (visible ? decrypt(value) : '••••••••••••') : (value || '---');
-
                 return (
-                    <div className="flex items-center justify-between gap-2 group/cell py-1 w-full bg-slate-50/50 lg:bg-transparent p-2 rounded-xl lg:p-0">
+                    <div className="flex items-center justify-between gap-3 p-4 bg-slate-900/60 rounded-2xl border border-white/5 group/cell transition-all hover:border-blue-500/30 w-full">
                         <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                                {icon && <Icon name={icon} size={14} className="text-blue-500 shrink-0" />}
-                                <span className={`${isPass || isCode ? 'font-mono bg-white lg:bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200' : `text-sm font-bold ${color}`} truncate`}>
+                                {icon && <Icon name={icon} size={14} className="text-blue-400 opacity-60" />}
+                                <span className={`${isPass || isCode ? 'mono bg-blue-950/30 text-blue-300 px-2 py-0.5 rounded text-[11px] border border-blue-900/30' : 'text-sm font-bold text-slate-100'} truncate`}>
                                     {display}
                                 </span>
-                                {isPass && (
-                                    <button onClick={() => setShowPasswordMap(p => ({...p, [id]: !p[id]}))} className="p-1 text-slate-400 hover:text-blue-600">
-                                        <Icon name={visible ? "eye-off" : "eye"} size={16} />
-                                    </button>
-                                )}
+                                {isPass && <button onClick={() => setShowPasswordMap(p => ({...p, [id]: !p[id]}))} className="text-slate-500 hover:text-blue-400 p-1"><Icon name={visible ? "eye-off" : "eye"} size={16} /></button>}
                             </div>
-                            {sub && <span className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 ml-1 tracking-widest">{sub}</span>}
+                            {sub && <span className="text-[9px] text-slate-500 font-black uppercase mt-1 tracking-widest">{sub}</span>}
                         </div>
-                        <button onClick={() => copyText(isPass ? decrypt(value) : value)} className="p-2 text-slate-400 hover:text-blue-600 bg-white shadow-sm border border-slate-100 rounded-lg lg:opacity-0 lg:group-hover/cell:opacity-100 transition-all">
-                            <Icon name="copy" size={14} />
-                        </button>
+                        <button onClick={() => { navigator.clipboard.writeText(isPass ? decrypt(value) : value); showMsg("Copiado al portapapeles"); }} className="p-2 text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg opacity-0 group-hover/cell:opacity-100 transition-all"><Icon name="copy" size={14} /></button>
                     </div>
                 );
             };
 
             return (
-                <div className="min-h-screen flex flex-col lg:flex-row bg-[#F8FAFC]">
-                    <div className={`fixed top-4 right-4 left-4 lg:left-auto lg:w-80 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform transition-all duration-500 z-[100] border border-slate-700 ${notification ? 'translate-y-0 opacity-100' : '-translate-y-20 opacity-0 pointer-events-none'}`}>
-                        <Icon name="check-circle" className="text-emerald-400" />
-                        <span className="text-sm font-bold tracking-tight">{notification}</span>
+                <div className="h-screen w-screen flex flex-col lg:flex-row overflow-hidden">
+                    
+                    {/* NOTIFICACIONES HUD */}
+                    <div className={`fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm glass border border-blue-500/40 px-6 py-4 rounded-3xl flex items-center gap-4 transform transition-all duration-500 notification-z shadow-[0_0_40px_rgba(59,130,246,0.2)] ${notification ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0 pointer-events-none'}`}>
+                        <div className={`w-2 h-2 rounded-full ${cloudStatus === 'online' ? 'bg-blue-400 animate-ping' : 'bg-warning animate-pulse'}`}></div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100">{notification}</span>
                     </div>
 
-                    <div className="lg:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sticky top-0 z-[60]">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-blue-600 p-1.5 rounded-lg text-white">
-                                <Icon name="shield-check" size={20} />
-                            </div>
-                            <span className="font-black text-slate-900 tracking-tighter">KeyVault <span className="text-blue-600">KGB</span></span>
+                    {/* CABECERA MÓVIL */}
+                    <div className="lg:hidden h-20 glass border-b border-white/10 flex items-center justify-between px-6 sticky top-0 header-z">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Icon name="shield" size={24} /></div>
+                            <span className="font-black text-xl tracking-tighter uppercase italic">Vault<span className="text-blue-500">Kgb</span></span>
                         </div>
-                        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-600 bg-slate-100 rounded-xl">
-                            <Icon name={isSidebarOpen ? "x" : "menu"} size={24} />
-                        </button>
+                        <div className="flex items-center gap-4">
+                            <div className={`w-2.5 h-2.5 rounded-full ${cloudStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
+                            <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-blue-400 bg-blue-500/5 rounded-xl border border-blue-500/20"><Icon name="menu" size={28} /></button>
+                        </div>
                     </div>
 
-                    <aside className={`fixed inset-y-0 left-0 z-50 w-full lg:w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-                        <div className="flex flex-col h-full pt-20 lg:pt-10 pb-8 px-6">
-                            <div className="hidden lg:flex items-center gap-3 mb-10 px-2">
-                                <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-100">
-                                    <Icon name="shield-check" size={24} />
-                                </div>
+                    {/* BARRA LATERAL */}
+                    <aside className={`fixed inset-y-0 left-0 sidebar-z w-full lg:w-80 glass border-r border-white/5 transform transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+                        <div className="flex flex-col h-full p-8">
+                            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden absolute top-6 right-6 p-2 text-slate-400"><Icon name="x" size={30} /></button>
+
+                            <div className="flex items-center gap-4 mb-16 px-2">
+                                <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-2xl"><Icon name="terminal" size={28} /></div>
                                 <div>
-                                    <h1 className="text-xl font-black text-slate-900 leading-none">KeyVault <span className="text-blue-600">KGB</span></h1>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1.5 tracking-widest">v4.4 MOBILE</p>
+                                    <h1 className="text-2xl font-black tracking-tighter uppercase italic">Vault<span className="text-blue-500">Kgb</span></h1>
+                                    <p className="text-[9px] text-blue-400 font-bold tracking-[0.4em] opacity-60 uppercase">Alpha Node v5.2</p>
                                 </div>
                             </div>
-                            <nav className="flex-1 space-y-1">
+                            
+                            <nav className="flex-1">
                                 {[
-                                    {id:'personal', n:'Personales', i:'mail'},
-                                    {id:'clients', n:'Clientes / Apps', i:'users'},
-                                    {id:'cameras', n:'Cámaras / Equipos', i:'cctv'}
+                                    {id:'personal', n:'Correo Personales', i:'mail', d:'Gestión de Cuentas'},
+                                    {id:'clients', n:'Accesos Hikconnect', i:'shield', d:'Control de Clientes'},
+                                    {id:'cameras', n:'Equipos DVR e IP', i:'cctv', d:'Inventario Técnico'}
                                 ].map(t => (
-                                    <button key={t.id} onClick={() => { setActiveTab(t.id); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-sm font-black transition-all ${activeTab === t.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}>
-                                        <Icon name={t.i} /> {t.n}
+                                    <button 
+                                        key={t.id} 
+                                        onClick={() => { setActiveTab(t.id); setIsSidebarOpen(false); }} 
+                                        className={`nav-item ${activeTab === t.id ? 'nav-active' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+                                    >
+                                        <div className="icon-box"><Icon name={t.i} size={20} /></div>
+                                        <div className="text-left min-w-0">
+                                            <div className="font-black text-sm uppercase tracking-wider mb-0.5 truncate">{t.n}</div>
+                                            <div className="text-[9px] font-bold uppercase opacity-40 tracking-widest">{t.d}</div>
+                                        </div>
                                     </button>
                                 ))}
                             </nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100">
-                                <div className={`flex items-center justify-center gap-3 px-4 py-3 rounded-2xl border ${onlineStatus === 'online' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
-                                    <div className={`h-2 w-2 rounded-full ${onlineStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                                    <span className="text-[10px] font-black uppercase tracking-widest">Cloud Sync Active</span>
+
+                            <div className="mt-auto pt-8 border-t border-white/5 space-y-4">
+                                {pendingSync.length > 0 && (
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-black text-amber-500 uppercase">Cola de Sincronización</span>
+                                            <span className="text-xs font-bold text-amber-400">+{pendingSync.length}</span>
+                                        </div>
+                                        <div className="text-[10px] text-amber-200/60 leading-tight">Registros guardados localmente esperando conexión...</div>
+                                    </div>
+                                )}
+                                
+                                <div className="glass bg-black/40 border border-white/5 rounded-[2rem] p-5">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Estado Cloud</span>
+                                        <div className={`px-2 py-0.5 rounded flex items-center gap-1.5 ${cloudStatus === 'online' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${cloudStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
+                                            <span className="text-[8px] font-black uppercase tracking-widest">{cloudStatus}</span>
+                                        </div>
+                                    </div>
+                                    <button onClick={fetchCloudData} disabled={isLoading} className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600/10 border border-blue-600/30 rounded-xl text-[9px] font-black text-blue-400 uppercase hover:bg-blue-600/20 transition-all disabled:opacity-50">
+                                        <Icon name="refresh-cw" size={12} className={isLoading ? "animate-spin" : ""} /> Recargar Datos
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </aside>
 
-                    <main className={`flex-1 transition-all duration-300 lg:ml-72 overflow-y-auto`}>
-                        <header className="hidden lg:flex h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-12 items-center justify-between">
-                            <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">{activeTab}</h2>
-                            <div className="flex items-center gap-3 px-5 py-2 bg-blue-600 text-white rounded-full text-[10px] font-bold shadow-lg">
-                                <Icon name="wifi" size={14} /> KGB SYSTEM ACTIVE
+                    {/* MAIN VIEWPORT */}
+                    <main className="flex-1 lg:ml-80 h-full overflow-y-auto relative scroll-smooth bg-black/20">
+                        
+                        <header className="hidden lg:flex h-28 px-12 items-center justify-between sticky top-0 glass border-b border-white/5 header-z">
+                            <div>
+                                <h3 className="text-2xl font-black uppercase tracking-tighter text-white italic">
+                                    {activeTab === 'personal' ? 'Correo Personales' : activeTab === 'clients' ? 'Accesos Hikconnect' : 'Equipos DVR e IP'}
+                                </h3>
+                                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-[0.5em] mt-1">Terminal Operativa de Red</p>
+                            </div>
+                            
+                            <div className="flex items-center gap-8">
+                                <div className="text-right">
+                                    <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">Local Storage Mode</div>
+                                    <div className="text-xs mono text-blue-400 bg-blue-500/5 px-3 py-1 rounded-lg border border-blue-500/20 uppercase">Persistent_v5.2</div>
+                                </div>
+                                <div className="h-12 w-px bg-white/10"></div>
+                                <div className={`px-6 py-3 rounded-2xl border flex items-center gap-4 transition-all duration-500 shadow-2xl ${cloudStatus === 'online' ? 'bg-emerald-500/5 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/5 border-rose-500/30 text-rose-400'}`}>
+                                    <Icon name={cloudStatus === 'online' ? "zap" : "alert-triangle"} size={18} />
+                                    <div className="flex flex-col">
+                                        <span className="text-[9px] font-black uppercase tracking-widest opacity-60">Enlace</span>
+                                        <span className="text-[11px] font-black uppercase tracking-[0.2em]">{cloudStatus === 'online' ? 'Cloud Link Activo' : 'Offline Mode'}</span>
+                                    </div>
+                                </div>
                             </div>
                         </header>
 
-                        <div className="w-full px-4 lg:px-12 py-6 lg:py-10 fade-in">
-                            <section className="mb-10">
-                                <div className="bg-white p-6 lg:p-10 rounded-[32px] lg:rounded-[48px] border border-slate-200 shadow-xl shadow-slate-200/30">
-                                    <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-                                            <Icon name="plus" size={20} />
-                                        </div>
-                                        Registrar Nuevo
-                                    </h2>
-                                    
+                        <div className="w-full px-6 lg:px-12 py-8 lg:py-12 fade-in">
+                            
+                            {isLoading ? (
+                                <div className="py-32 text-center space-y-6">
+                                    <div className="w-16 h-16 border-4 border-blue-500/10 border-t-blue-500 rounded-full animate-spin mx-auto shadow-[0_0_20px_rgba(59,130,246,0.2)]"></div>
+                                    <div className="loading-pulse text-blue-400 font-black uppercase tracking-[0.6em] text-xs">Descargando Base Central...</div>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* TAB: CORREO PERSONALES */}
                                     {activeTab === 'personal' && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <input placeholder="Usuario / Correo" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white" value={forms.personal.email} onChange={e => setForms({...forms, personal: {...forms.personal, email: e.target.value}})} />
-                                            <input type="password" placeholder="Contraseña" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white" value={forms.personal.password} onChange={e => setForms({...forms, personal: {...forms.personal, password: e.target.value}})} />
-                                            <button onClick={() => handleSave('personal', 'Personales', [forms.personal.email, forms.personal.password])} className="md:col-span-2 w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 active:scale-95 transition-all">Guardar en Cloud</button>
-                                        </div>
-                                    )}
+                                        <div className="space-y-12">
+                                            <div className="glass p-8 lg:p-12 rounded-[3rem] shadow-2xl">
+                                                <div className="flex items-center gap-4 mb-10">
+                                                    <div className="w-14 h-14 rounded-3xl bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/30"><Icon name="plus" size={28} /></div>
+                                                    <h2 className="text-3xl font-black uppercase tracking-tight text-white italic">Nuevo Correo</h2>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-[0.2em]">Token / Email</label>
+                                                        <input placeholder="ejemplo@correo.com" className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.personal.email} onChange={e => setForms({...forms, personal: {...forms.personal, email: e.target.value}})} />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-[0.2em]">Clave de Acceso</label>
+                                                        <input type="password" placeholder="••••••••" className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.personal.password} onChange={e => setForms({...forms, personal: {...forms.personal, password: e.target.value}})} />
+                                                    </div>
+                                                    <button onClick={() => handleSave('personal', 'Personales', [forms.personal.email, forms.personal.password])} className="md:col-span-2 w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black shadow-2xl shadow-blue-600/30 uppercase tracking-[0.3em] hover:bg-blue-500 active:scale-[0.98] transition-all flex items-center justify-center gap-4">
+                                                        <Icon name="upload-cloud" size={20} /> Guardar Registro
+                                                    </button>
+                                                </div>
+                                            </div>
 
-                                    {activeTab === 'clients' && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <input placeholder="Nombre Cliente" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.clients.clientName} onChange={e => setForms({...forms, clients: {...forms.clients, clientName: e.target.value}})} />
-                                            <input placeholder="Email / Teléfono" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.clients.emailPhone} onChange={e => setForms({...forms, clients: {...forms.clients, emailPhone: e.target.value}})} />
-                                            <input type="password" placeholder="Password App" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.clients.appPass} onChange={e => setForms({...forms, clients: {...forms.clients, appPass: e.target.value}})} />
-                                            <button onClick={() => handleSave('clients', 'Clientes', [forms.clients.clientName, forms.clients.emailPhone, forms.clients.encryptPass, forms.clients.appPass, forms.clients.tags])} className="md:col-span-2 w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-lg active:scale-95 transition-all">Registrar Cliente</button>
-                                        </div>
-                                    )}
-
-                                    {activeTab === 'cameras' && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                            <input placeholder="Cliente" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.clientName} onChange={e => setForms({...forms, cameras: {...forms.cameras, clientName: e.target.value}})} />
-                                            <input placeholder="Modelo" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.model} onChange={e => setForms({...forms, cameras: {...forms.cameras, model: e.target.value}})} />
-                                            <input placeholder="Nº de Serie" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.serial} onChange={e => setForms({...forms, cameras: {...forms.cameras, serial: e.target.value}})} />
-                                            <input placeholder="IP Local/Púb" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.ip} onChange={e => setForms({...forms, cameras: {...forms.cameras, ip: e.target.value}})} />
-                                            <input placeholder="Ubicación" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.location} onChange={e => setForms({...forms, cameras: {...forms.cameras, location: e.target.value}})} />
-                                            <input type="date" className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.installationDate} onChange={e => setForms({...forms, cameras: {...forms.cameras, installationDate: e.target.value}})} />
-                                            <input placeholder="Observaciones" className="md:col-span-2 w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.observations} onChange={e => setForms({...forms, cameras: {...forms.cameras, observations: e.target.value}})} />
-                                            <button onClick={() => handleSave('cameras', 'Equipos', [forms.cameras.installationDate, forms.cameras.clientName, forms.cameras.model, forms.cameras.serial, forms.cameras.ip, forms.cameras.activationCode, forms.cameras.location, forms.cameras.observations])} className="md:col-span-2 lg:col-span-4 w-full py-5 bg-slate-900 text-white rounded-2xl font-black shadow-xl active:scale-95 transition-all">Guardar Equipo</button>
-                                        </div>
-                                    )}
-                                </div>
-                            </section>
-
-                            <section>
-                                <div className="bg-white rounded-[32px] border border-slate-200 shadow-xl overflow-hidden">
-                                    <div className="px-6 py-6 border-b border-slate-100 bg-slate-50/50">
-                                        <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest flex items-center gap-2">
-                                            <Icon name="list" className="text-blue-600" /> Historial de Registros
-                                        </h3>
-                                    </div>
-                                    
-                                    <div className="table-container">
-                                        {activeTab === 'personal' && (
-                                            <table className="w-full text-left min-w-[500px]">
-                                                <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b">
-                                                    <tr><th className="px-6 py-4">Usuario</th><th className="px-6 py-4">Password</th><th className="px-6 py-4 text-right">Acción</th></tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
+                                            <div className="glass rounded-[3rem] shadow-2xl overflow-hidden border border-white/5">
+                                                <div className="px-10 py-8 border-b border-white/5 bg-white/5 flex items-center justify-between">
+                                                    <div className="flex items-center gap-4">
+                                                        <Icon name="list" size={20} className="text-blue-400" />
+                                                        <span className="font-black text-blue-400 uppercase text-sm tracking-[0.3em]">Cuentas en Memoria Persistent</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold mono text-slate-500">{data.personal.length} REGISTROS</span>
+                                                </div>
+                                                <div className="p-6 lg:p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                                     {data.personal.map(item => (
-                                                        <tr key={item.id} className="data-row">
-                                                            <td className="px-6 py-5"><Cell value={item.email} /></td>
-                                                            <td className="px-6 py-5"><Cell value={item.password} isPass id={item.id} /></td>
-                                                            <td className="px-6 py-5 text-right"><button onClick={() => handleDelete('personal', item.id)} className="p-2 text-rose-500 bg-rose-50 rounded-xl active:scale-90"><Icon name="trash-2" size={16} /></button></td>
-                                                        </tr>
+                                                        <div key={item.id} className="bg-slate-900/40 border border-white/5 p-6 rounded-[2.5rem] space-y-4 hover:border-blue-500/40 transition-all group/card">
+                                                            <div className="flex justify-between items-start">
+                                                                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500"><Icon name="shield-check" size={20} /></div>
+                                                                <button onClick={() => setData(prev => ({...prev, personal: prev.personal.filter(x => x.id !== item.id)}))} className="text-slate-600 hover:text-rose-500 p-2 opacity-0 group-hover/card:opacity-100"><Icon name="trash-2" size={18} /></button>
+                                                            </div>
+                                                            <div className="space-y-4">
+                                                                <Cell value={item.email} sub="Usuario ID" />
+                                                                <Cell value={item.password} isPass id={item.id} sub="Clave Cifrada" />
+                                                            </div>
+                                                        </div>
                                                     ))}
-                                                </tbody>
-                                            </table>
-                                        )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
-                                        {activeTab === 'clients' && (
-                                            <table className="w-full text-left min-w-[600px]">
-                                                <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b">
-                                                    <tr><th className="px-6 py-4">Cliente</th><th className="px-6 py-4">Acceso</th><th className="px-6 py-4">App Pass</th><th className="px-6 py-4 text-right"></th></tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {data.clients.map(item => (
-                                                        <tr key={item.id} className="data-row">
-                                                            <td className="px-6 py-5"><Cell value={item.clientName} sub={new Date(item.createdAt).toLocaleDateString()} /></td>
-                                                            <td className="px-6 py-5"><Cell value={item.emailPhone} /></td>
-                                                            <td className="px-6 py-5"><Cell value={item.appPass} isPass id={item.id+'app'} /></td>
-                                                            <td className="px-6 py-5 text-right"><button onClick={() => handleDelete('clients', item.id)} className="p-2 text-rose-500 bg-rose-50 rounded-xl active:scale-90"><Icon name="trash-2" size={16} /></button></td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        )}
+                                    {/* TAB: ACCESOS HIKCONNECT */}
+                                    {activeTab === 'clients' && (
+                                        <div className="space-y-10">
+                                            <div className="glass p-10 lg:p-12 rounded-[3.5rem] shadow-2xl">
+                                                <h2 className="text-3xl font-black uppercase tracking-tight text-white mb-10 flex items-center gap-6 italic">
+                                                    <div className="w-16 h-16 rounded-[2rem] bg-blue-500/20 flex items-center justify-center text-blue-400 border border-blue-500/30"><Icon name="users" size={32} /></div>
+                                                    Nuevo Cliente Hikconnect
+                                                </h2>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                                    <input placeholder="Nombre Cliente" className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.clientName} onChange={e => setForms({...forms, clients: {...forms.clients, clientName: e.target.value}})} />
+                                                    <input placeholder="Correo / Celular" className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.emailPhone} onChange={e => setForms({...forms, clients: {...forms.clients, emailPhone: e.target.value}})} />
+                                                    <input type="password" placeholder="Clave App" className="w-full px-8 py-5 cyber-input rounded-3xl font-bold text-sm" value={forms.clients.appPass} onChange={e => setForms({...forms, clients: {...forms.clients, appPass: e.target.value}})} />
+                                                    <button onClick={() => handleSave('clients', 'Clientes', [forms.clients.clientName, forms.clients.emailPhone, forms.clients.encryptPass, forms.clients.appPass, forms.clients.tags])} className="md:col-span-2 lg:col-span-3 w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] transition-all hover:bg-blue-500 active:scale-95">Guardar Cliente</button>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                {data.clients.map(item => (
+                                                    <div key={item.id} className="glass p-10 rounded-[3.5rem] border border-white/5 space-y-6 hover:border-blue-500/30 transition-all">
+                                                        <div className="flex justify-between items-center">
+                                                            <h4 className="font-black text-2xl text-white uppercase italic tracking-tighter">{item.clientName}</h4>
+                                                            <button onClick={() => setData(prev => ({...prev, clients: prev.clients.filter(x => x.id !== item.id)}))} className="text-rose-500/30 hover:text-rose-500"><Icon name="trash-2" size={20} /></button>
+                                                        </div>
+                                                        <div className="space-y-4">
+                                                            <Cell value={item.emailPhone} sub="Enlace de Acceso" icon="link" />
+                                                            <Cell value={item.appPass} isPass id={item.id+'app'} sub="Clave Aplicación" icon="lock" />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
-                                        {activeTab === 'cameras' && (
-                                            <table className="w-full text-left min-w-[900px]">
-                                                <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase border-b tracking-widest">
-                                                    <tr><th className="px-8 py-5">Equipo</th><th className="px-8 py-5">Red / Serie</th><th className="px-8 py-5">Instalación / Notas</th><th className="px-8 py-5 w-20"></th></tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {data.cameras.map(item => (
-                                                        <tr key={item.id} className="data-row align-top">
-                                                            <td className="px-8 py-6">
-                                                                <div className="font-black text-sm text-slate-900 leading-tight mb-1">{item.model}</div>
-                                                                <div className="flex items-center gap-1.5 text-[10px] text-blue-600 font-bold uppercase tracking-wider">
-                                                                    <Icon name="users" size={10} /> {item.clientName}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-8 py-6">
-                                                                <div className="space-y-2">
-                                                                    <Cell value={item.ip || '0.0.0.0'} sub="IP Local" isCode icon="globe" />
-                                                                    <Cell value={item.serial} sub="Nº Serie" isCode icon="hash" />
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-8 py-6">
-                                                                <div className="space-y-3">
-                                                                    <Cell value={item.installationDate || '---'} sub="Instalación" icon="calendar" />
-                                                                    <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                                                                        <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1.5 mb-1"><Icon name="map-pin" size={10}/> Ubicación / Notas</span>
-                                                                        <p className="text-xs font-bold text-slate-700 leading-relaxed">{item.location || 'N/A'}</p>
-                                                                        {item.observations && <p className="text-[11px] font-medium text-slate-500 italic mt-1 border-t border-slate-200 pt-1">{item.observations}</p>}
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-8 py-6 text-right"><button onClick={() => handleDelete('cameras', item.id)} className="p-3 text-rose-500 bg-rose-50 rounded-xl active:scale-90 transition-all"><Icon name="trash-2" size={18} /></button></td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        )}
-                                        {Object.values(data).every(arr => arr.length === 0) && (
-                                            <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm">No hay registros disponibles</div>
-                                        )}
-                                    </div>
-                                </div>
-                            </section>
+                                    {/* TAB: EQUIPOS DVR E IP */}
+                                    {activeTab === 'cameras' && (
+                                        <div className="space-y-10">
+                                            <div className="glass p-10 rounded-[3.5rem] shadow-2xl">
+                                                <h2 className="text-2xl font-black uppercase tracking-tight text-white mb-10 flex items-center gap-6 italic"><Icon name="cpu" className="text-blue-500" /> Registro de Unidades</h2>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                                    <input placeholder="Dueño / Cliente" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.clientName} onChange={e => setForms({...forms, cameras: {...forms.cameras, clientName: e.target.value}})} />
+                                                    <input placeholder="Modelo del Equipo" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.model} onChange={e => setForms({...forms, cameras: {...forms.cameras, model: e.target.value}})} />
+                                                    <input placeholder="Número de Serie" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.serial} onChange={e => setForms({...forms, cameras: {...forms.cameras, serial: e.target.value}})} />
+                                                    <input placeholder="Dirección IP" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.ip} onChange={e => setForms({...forms, cameras: {...forms.cameras, ip: e.target.value}})} />
+                                                    <input placeholder="Ubicación Física" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm" value={forms.cameras.location} onChange={e => setForms({...forms, cameras: {...forms.cameras, location: e.target.value}})} />
+                                                    <input type="date" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm text-slate-500" value={forms.cameras.installationDate} onChange={e => setForms({...forms, cameras: {...forms.cameras, installationDate: e.target.value}})} />
+                                                    <input placeholder="Notas Técnicas" className="cyber-input px-6 py-4 rounded-2xl font-bold text-sm md:col-span-2" value={forms.cameras.observations} onChange={e => setForms({...forms, cameras: {...forms.cameras, observations: e.target.value}})} />
+                                                    <button onClick={() => handleSave('cameras', 'Equipos', [forms.cameras.installationDate, forms.cameras.clientName, forms.cameras.model, forms.cameras.serial, forms.cameras.ip, forms.cameras.activationCode, forms.cameras.location, forms.cameras.observations])} className="md:col-span-2 lg:col-span-4 w-full py-6 bg-white text-slate-900 rounded-[2rem] font-black uppercase tracking-[0.4em] transition-all hover:bg-blue-400">Actualizar Base Central</button>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-8">
+                                                {data.cameras.map(item => (
+                                                    <div key={item.id} className="glass p-10 rounded-[4rem] flex flex-col lg:flex-row gap-12 items-start border border-white/5 transition-all hover:border-blue-500/20 group">
+                                                        <div className="lg:w-1/4">
+                                                            <span className="text-[11px] font-black text-blue-500 uppercase tracking-[0.4em] mb-3 block">Unidad Registrada</span>
+                                                            <h4 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-4 leading-none">{item.model}</h4>
+                                                            <div className="inline-flex items-center gap-3 bg-blue-500/10 text-blue-400 px-5 py-2 rounded-2xl text-[11px] font-black uppercase">
+                                                                <Icon name="user" size={14} /> {item.clientName}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                                                            <Cell value={item.ip} isCode icon="globe" sub="Host Mapping" />
+                                                            <Cell value={item.serial} isCode icon="hash" sub="Hardlink ID" />
+                                                            <Cell value={item.installationDate} icon="calendar" sub="Fecha Alta" />
+                                                            <Cell value={item.location} icon="map-pin" sub="Posición" />
+                                                        </div>
+                                                        {item.observations && (
+                                                            <div className="lg:w-1/4 bg-blue-950/20 p-6 rounded-[2.5rem] border border-blue-900/30 text-[13px] text-slate-300 italic leading-relaxed">
+                                                                <div className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-3">Logs Técnicos</div>
+                                                                {item.observations}
+                                                            </div>
+                                                        )}
+                                                        <button onClick={() => setData(prev => ({...prev, cameras: prev.cameras.filter(x => x.id !== item.id)}))} className="p-4 text-rose-500/30 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all self-center lg:self-start"><Icon name="trash-2" size={24} /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </div>
-                        <footer className="p-8 text-slate-400 text-[10px] font-black uppercase text-center tracking-[0.4em] mt-auto">KeyVault KGB • 2026</footer>
+                        <footer className="p-20 text-slate-800 text-[10px] font-black uppercase text-center tracking-[1.2em] opacity-20 italic">VaultKgb Persistent Hub • 2026</footer>
                     </main>
                 </div>
             );
