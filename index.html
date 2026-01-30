@@ -1,384 +1,357 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Shield, Mail, Users, Plus, Copy, Eye, EyeOff, Tag, Trash2, CheckCircle,
-  Lock, Smartphone, Calendar, Key, Cctv, Database, Info, Globe, Menu, X,
-  ChevronRight, Clock, ClipboardList, Share2, AlertCircle, Wifi, RefreshCw,
-  Activity, Server, ShieldCheck, MapPin, Hash
-} from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy
-} from 'firebase/firestore';
-import { 
-  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged 
-} from 'firebase/auth';
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeyVault KGB v4.2 - Enterprise Cloud</title>
+    <!-- Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React y Babel para ejecutar el código en el navegador -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .group:hover .group-hover\:opacity-100 { opacity: 1; }
+        .animate-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Scrollbar personalizado */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-[#F8FAFC]">
+    <div id="root"></div>
 
-/**
- * PROJECT: KeyVault KGB
- * VERSION: 4.2 Stable (Cloud Connection Fix)
- * FEATURES: Sidebar, Google Sheets Sync (DB_KeyVault_KGB), Firestore, 
- * IP Equipments (IP, Date, Obs), Copy Buttons on all fields, 
- * Optimized table spacing and enhanced cloud connector.
- */
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// --- CONFIGURACIÓN DE FIREBASE ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'keyvault-kgb';
+        // --- CONFIGURACIÓN DE FIREBASE (Asegúrate de que estos datos coincidan con tu consola si usas uno propio) ---
+        // Si no tienes uno, el sistema intentará usar el configurado por defecto
+        const firebaseConfig = {
+            apiKey: "", 
+            authDomain: "keyvault-kgb.firebaseapp.com",
+            projectId: "keyvault-kgb",
+            storageBucket: "keyvault-kgb.appspot.com",
+            messagingSenderId: "",
+            appId: "keyvault-kgb"
+        };
 
-// =========================================================================
-// 🚀 URL DE GOOGLE APPS SCRIPT ACTUALIZADA (v4.2) 🚀
-// =========================================================================
-const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxS43PqEbhWpJAy0oFHE-xN8Ek2UBvyXKyVn1coXS5nWHrj-XC832Zj9VffdN9Rs6fBHw/exec"; 
-// =========================================================================
+        // URL DE GOOGLE SHEETS
+        const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxS43PqEbhWpJAy0oFHE-xN8Ek2UBvyXKyVn1coXS5nWHrj-XC832Zj9VffdN9Rs6fBHw/exec";
 
-// --- UTILIDADES ---
-const encrypt = (text) => btoa(text);
-const decrypt = (encoded) => {
-  try { return atob(encoded); } catch (e) { return encoded; }
-};
+        // Iniciar Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-const App = () => {
-  const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('personal'); 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [personalData, setPersonalData] = useState([]);
-  const [clientData, setClientData] = useState([]);
-  const [cameraData, setCameraData] = useState([]);
-  const [notification, setNotification] = useState(null);
-  const [showPasswordMap, setShowPasswordMap] = useState({});
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [onlineStatus, setOnlineStatus] = useState('checking');
+        // Hacerlos globales para React
+        window.KGB_DB = db;
+        window.KGB_AUTH = auth;
+        window.KGB_SHEETS_URL = SHEETS_WEBAPP_URL;
+    </script>
 
-  // --- FORM STATES ---
-  const [personalForm, setPersonalForm] = useState({ email: '', password: '' });
-  const [clientForm, setClientForm] = useState({ clientName: '', emailPhone: '', encryptPass: '', appPass: '', tags: '' });
-  const [cameraForm, setCameraForm] = useState({ clientName: '', model: '', serial: '', activationCode: '', location: '', ip: '', installationDate: '', observations: '' });
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        
+        // Iconos simplificados con SVG para máxima compatibilidad sin librerías externas
+        const Icon = ({ name, size = 20, className = "" }) => {
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
 
-  // 1. Autenticación Inicial
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) { console.error("Auth error:", error); }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [activeTab, setActiveTab] = useState('personal'); 
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            const [data, setData] = useState({ personal: [], clients: [], cameras: [] });
+            const [notification, setNotification] = useState(null);
+            const [showPasswordMap, setShowPasswordMap] = useState({});
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [onlineStatus, setOnlineStatus] = useState('online');
 
-  // 2. Escucha de Datos (Firestore)
-  useEffect(() => {
-    if (!user) return;
-    const qP = query(collection(db, 'artifacts', appId, 'users', user.uid, 'personal'), orderBy('createdAt', 'desc'));
-    const unsubP = onSnapshot(qP, (s) => setPersonalData(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    
-    const qCl = query(collection(db, 'artifacts', appId, 'users', user.uid, 'clients'), orderBy('createdAt', 'desc'));
-    const unsubCl = onSnapshot(qCl, (s) => setClientData(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    
-    const qCa = query(collection(db, 'artifacts', appId, 'users', user.uid, 'cameras'), orderBy('createdAt', 'desc'));
-    const unsubCa = onSnapshot(qCa, (s) => setCameraData(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    
-    return () => { unsubP(); unsubCl(); unsubCa(); };
-  }, [user]);
+            // --- FORM STATES ---
+            const [forms, setForms] = useState({
+                personal: { email: '', password: '' },
+                clients: { clientName: '', emailPhone: '', encryptPass: '', appPass: '', tags: '' },
+                cameras: { clientName: '', model: '', serial: '', activationCode: '', location: '', ip: '', installationDate: '', observations: '' }
+            });
 
-  // 3. Verificación de Conexión Cloud
-  useEffect(() => {
-    checkSheetConnection();
-  }, []);
+            useEffect(() => {
+                const setup = async () => {
+                    const auth = window.KGB_AUTH;
+                    if(!auth) return;
+                    await signInAnonymously(auth);
+                    onAuthStateChanged(auth, setUser);
+                    lucide.createIcons();
+                };
+                setup();
+            }, []);
 
-  const checkSheetConnection = async () => {
-    if (!SHEETS_WEBAPP_URL) {
-      setOnlineStatus('offline');
-      return;
-    }
-    setOnlineStatus('checking');
-    try {
-      // Petición de prueba con modo 'no-cors' para evitar errores de preflight de Google
-      await fetch(SHEETS_WEBAPP_URL, { 
-        method: 'POST', 
-        mode: 'no-cors',
-        cache: 'no-cache',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ ping: true })
-      });
-      // Con no-cors, si llega aquí sin lanzar catch, el endpoint es accesible
-      setOnlineStatus('online');
-    } catch (e) {
-      setOnlineStatus('offline');
-    }
-  };
+            useEffect(() => {
+                if (!user || !window.KGB_DB) return;
+                const db = window.KGB_DB;
+                const userId = user.uid;
+                
+                const unsubP = onSnapshot(query(collection(db, 'artifacts', 'keyvault-kgb', 'users', userId, 'personal'), orderBy('createdAt', 'desc')), s => setData(prev => ({...prev, personal: s.docs.map(d => ({id: d.id, ...d.data()}))})));
+                const unsubCl = onSnapshot(query(collection(db, 'artifacts', 'keyvault-kgb', 'users', userId, 'clients'), orderBy('createdAt', 'desc')), s => setData(prev => ({...prev, clients: s.docs.map(d => ({id: d.id, ...d.data()}))})));
+                const unsubCa = onSnapshot(query(collection(db, 'artifacts', 'keyvault-kgb', 'users', userId, 'cameras'), orderBy('createdAt', 'desc')), s => setData(prev => ({...prev, cameras: s.docs.map(d => ({id: d.id, ...d.data()}))})));
+                
+                return () => { unsubP(); unsubCl(); unsubCa(); };
+            }, [user]);
 
-  const handleManualSync = async () => {
-    setIsSyncing(true);
-    await checkSheetConnection();
-    setTimeout(() => {
-      setIsSyncing(false);
-      showMsg(onlineStatus === 'online' ? "Enlace Cloud Verificado" : "Error de Conexión Cloud");
-    }, 1000);
-  };
+            useEffect(() => { lucide.createIcons(); }, [activeTab, data, isSidebarOpen]);
 
-  // --- FUNCIÓN DE ENVÍO CORREGIDA ---
-  const sendToGoogleSheets = async (sheetName, valuesArray) => {
-    if (!SHEETS_WEBAPP_URL) return;
-    try {
-      const payload = {
-        sheet: sheetName,
-        values: valuesArray
-      };
+            const showMsg = (text) => {
+                setNotification(text);
+                setTimeout(() => setNotification(null), 3000);
+            };
 
-      // Se usa fetch con modo no-cors y Content-Type text/plain
-      // Esta es la forma más fiable de hablar con Google Apps Script desde un navegador
-      await fetch(SHEETS_WEBAPP_URL, {
-        method: 'POST',
-        mode: 'no-cors', 
-        cache: 'no-cache',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-      
-      setOnlineStatus('online');
-      return true;
-    } catch (error) { 
-      console.error("Error sending to Sheets:", error);
-      setOnlineStatus('offline');
-      return false;
-    }
-  };
+            const copyToClipboard = (text) => {
+                navigator.clipboard.writeText(text);
+                showMsg("¡Copiado al portapapeles!");
+            };
 
-  const showMsg = (text) => {
-    setNotification(text);
-    setTimeout(() => setNotification(null), 3000);
-  };
+            const encrypt = (text) => btoa(text);
+            const decrypt = (encoded) => { try { return atob(encoded); } catch (e) { return encoded; } };
 
-  const copyToClipboard = (text) => {
-    if (!text) return;
-    const input = document.createElement('textarea');
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand('copy');
-    document.body.removeChild(input);
-    showMsg("Copiado con éxito");
-  };
+            const handleSave = async (type, sheetName, valuesForSheet) => {
+                if (!user || !window.KGB_DB) return;
+                try {
+                    const timestamp = new Date().toLocaleString();
+                    const collectionName = type === 'personal' ? 'personal' : type === 'clients' ? 'clients' : 'cameras';
+                    
+                    await addDoc(collection(window.KGB_DB, 'artifacts', 'keyvault-kgb', 'users', user.uid, collectionName), {
+                        ...forms[type],
+                        createdAt: new Date().toISOString()
+                    });
 
-  const generatePass = () => {
-    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
-    return Array.from({length: 14}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  };
+                    // Enviar a Sheets
+                    if (window.KGB_SHEETS_URL) {
+                        fetch(window.KGB_SHEETS_URL, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'text/plain' },
+                            body: JSON.stringify({ sheet: sheetName, values: [timestamp, ...valuesForSheet] })
+                        });
+                    }
 
-  const toggleVisibility = (id) => setShowPasswordMap(prev => ({ ...prev, [id]: !prev[id] }));
+                    // Reset form
+                    const newForms = { ...forms };
+                    Object.keys(newForms[type]).forEach(key => newForms[type][key] = '');
+                    setForms(newForms);
+                    showMsg("Guardado y Sincronizado");
+                } catch (e) { console.error(e); }
+            };
 
-  // --- ACCIONES DE GUARDADO ---
-  const handleSave = async (colName, data, resetFn, sheetName, valuesForSheet) => {
-    if (!user) return;
-    try {
-      const timestamp = new Date().toLocaleString();
-      
-      // 1. Guardar en Firebase (Base de datos local segura)
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, colName), {
-        ...data,
-        createdAt: new Date().toISOString()
-      });
+            const handleDelete = async (type, id) => {
+                const col = type === 'personal' ? 'personal' : type === 'clients' ? 'clients' : 'cameras';
+                await deleteDoc(doc(window.KGB_DB, 'artifacts', 'keyvault-kgb', 'users', user.uid, col, id));
+                showMsg("Registro eliminado");
+            };
 
-      // 2. Sincronizar con Google Sheets (En segundo plano)
-      sendToGoogleSheets(sheetName, [timestamp, ...valuesForSheet]);
-      
-      resetFn();
-      showMsg("Guardado y Sincronizando...");
-    } catch (e) { 
-      console.error(e); 
-      showMsg("Error al guardar localmente");
-    }
-  };
+            const DataCell = ({ value, subValue, isPassword, isCode, id, icon }) => {
+                const isVisible = showPasswordMap[id];
+                const displayValue = isPassword ? (isVisible ? decrypt(value) : '••••••••••••') : value;
 
-  const handleDelete = async (colName, id) => {
-    if (!user) return;
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, colName, id));
-      showMsg("Registro eliminado");
-    } catch (e) { console.error(e); }
-  };
-
-  const DataCell = ({ value, subValue, isPassword, id, onToggle, isVisible, isCode, isLongText, icon: Icon }) => (
-    <div className="flex items-start justify-between gap-2 group/cell w-full py-1">
-      <div className="flex flex-col min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon size={12} className="text-blue-500 shrink-0" />}
-          {isPassword ? (
-            <code className={`${isCode ? 'text-[11px] bg-blue-50 text-blue-700 border-blue-100' : 'text-[12px] bg-gray-100 text-gray-700 border-gray-200'} font-mono font-bold px-2 py-1 rounded-lg border leading-none truncate`}>
-              {isVisible ? decrypt(value) : '••••••••••••'}
-            </code>
-          ) : (
-            <span className={`${isCode ? 'font-mono text-[11px] text-blue-600 bg-blue-50 px-2 py-0.5 border border-blue-100 rounded font-bold' : 'text-sm font-black text-slate-800'} ${isLongText ? 'whitespace-normal leading-relaxed text-xs font-medium' : 'truncate'}`}>
-              {value}
-            </span>
-          )}
-          {isPassword && onToggle && (
-            <button onClick={onToggle} className="text-gray-400 hover:text-blue-600 shrink-0 transition-colors">
-              {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-          )}
-        </div>
-        {subValue && <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5 ml-0.5">{subValue}</div>}
-      </div>
-      <button onClick={() => copyToClipboard(isPassword ? decrypt(value) : value)} className="opacity-0 group-hover/cell:opacity-100 p-1.5 text-slate-300 hover:text-blue-600 hover:bg-white rounded-lg transition-all border border-transparent hover:border-slate-100 shrink-0"><Copy size={12} /></button>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col lg:flex-row font-sans selection:bg-blue-100">
-      <div className={`fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform transition-all duration-500 z-[100] border border-slate-700 ${notification ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
-        <CheckCircle size={20} className="text-emerald-400" />
-        <span className="text-sm font-bold tracking-tight">{notification}</span>
-      </div>
-      
-      <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="fixed top-6 left-6 z-[60] bg-blue-600 text-white p-3 rounded-2xl shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center border border-blue-500 active:scale-90">{isSidebarOpen ? <X size={20} /> : <Menu size={20} />}</button>
-
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex flex-col h-full pt-24 pb-8 px-6">
-          <div className="flex items-center gap-3 mb-10 px-2">
-            <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-100"><ShieldCheck size={24} /></div>
-            <div>
-              <h1 className="text-xl font-black text-slate-900 leading-none tracking-tighter">KeyVault <span className="text-blue-600">KGB</span></h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.25em] mt-1.5">v4.2 CLOUD ENGINE</p>
-            </div>
-          </div>
-
-          <nav className="flex-1 space-y-2">
-            {[{ id: 'personal', label: 'Personales', icon: Mail }, { id: 'clients', label: 'Clientes / Apps', icon: Users }, { id: 'cameras', label: 'Cámaras / Equipos', icon: Cctv }].map(tab => (
-              <button key={tab.id} onClick={() => { setActiveTab(tab.id); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-4 rounded-2xl text-sm font-black transition-all ${activeTab === tab.id ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
-                <div className="flex items-center gap-4"><tab.icon size={20} />{tab.label}</div>
-                {activeTab === tab.id && <ChevronRight size={16} />}
-              </button>
-            ))}
-          </nav>
-
-          <div className="mt-8 pt-8 border-t border-slate-100 space-y-4">
-             <div className="flex items-center gap-2 px-2">
-                <Server size={14} className="text-blue-500"/><span className="text-[10px] font-black uppercase tracking-widest text-slate-400">DB_KeyVault_KGB</span>
-             </div>
-             <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${onlineStatus === 'online' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : onlineStatus === 'checking' ? 'bg-blue-50 border-blue-100 text-blue-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
-                <div className={`h-2 w-2 rounded-full ${onlineStatus === 'online' ? 'bg-emerald-500 animate-pulse' : onlineStatus === 'checking' ? 'bg-blue-500 animate-pulse' : 'bg-rose-500'}`} />
-                <span className="text-[10px] font-black uppercase tracking-widest">{onlineStatus === 'online' ? 'Cloud Link OK' : onlineStatus === 'checking' ? 'Verificando...' : 'Error Enlace'}</span>
-             </div>
-          </div>
-        </div>
-      </aside>
-
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarOpen ? 'lg:ml-72' : 'ml-0'}`}>
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-6 lg:px-12 flex items-center justify-between shadow-sm">
-           <div className="flex items-center gap-4">
-              <div className="hidden lg:block w-px h-6 bg-slate-200 mx-2" /><h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">{activeTab}</h2>
-           </div>
-           <div className="flex items-center gap-4 lg:gap-8">
-              <div className={`flex items-center gap-3 px-5 py-2.5 rounded-full border shadow-sm transition-all duration-500 ${onlineStatus === 'online' ? 'bg-emerald-600 border-emerald-500 text-white' : onlineStatus === 'checking' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-rose-600 border-rose-500 text-white'}`}>
-                <div className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span></div>
-                <span className="text-xs font-black uppercase tracking-[0.15em] hidden sm:inline">{onlineStatus === 'online' ? 'CLOUD ONLINE' : onlineStatus === 'checking' ? 'CONECTANDO' : 'CLOUD OFFLINE'}</span>
-                <Wifi size={16} strokeWidth={3} />
-              </div>
-              <button onClick={handleManualSync} disabled={isSyncing} className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 ${isSyncing ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg'}`}><RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /><span className="hidden md:inline">Sincronizar</span></button>
-           </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto w-full px-6 lg:px-12 py-12">
-          {activeTab === 'personal' && (
-            <div className="grid lg:grid-cols-12 gap-12 animate-in fade-in duration-500">
-              <div className="lg:col-span-4">
-                <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-xl sticky top-32">
-                  <h2 className="text-xl font-black text-slate-900 mb-8 flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Plus size={20} /></div>Nuevo Acceso</h2>
-                  <form onSubmit={(e) => { e.preventDefault(); handleSave('personal', { email: personalForm.email, password: encrypt(personalForm.password) }, () => setPersonalForm({email:'', password:''}), 'Personales', [personalForm.email, personalForm.password]); }} className="space-y-6">
-                    <div className="space-y-2">
-                       <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Usuario / Correo</label>
-                       <input required type="text" placeholder="admin@kgb.com" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm" value={personalForm.email} onChange={e => setPersonalForm({...personalForm, email: e.target.value})} />
+                return (
+                    <div className="flex items-start justify-between gap-2 group/cell w-full py-1">
+                        <div className="flex flex-col min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                                {icon && <Icon name={icon} size={14} className="text-blue-500" />}
+                                <span className={`${isPassword || isCode ? 'font-mono bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200' : 'text-sm font-bold text-slate-800'} truncate`}>
+                                    {displayValue}
+                                </span>
+                                {isPassword && (
+                                    <button onClick={() => setShowPasswordMap(prev => ({...prev, [id]: !prev[id]}))} className="text-slate-400 hover:text-blue-600">
+                                        <Icon name={isVisible ? "eye-off" : "eye"} size={14} />
+                                    </button>
+                                )}
+                            </div>
+                            {subValue && <span className="text-[9px] text-slate-400 font-black uppercase mt-0.5">{subValue}</span>}
+                        </div>
+                        <button onClick={() => copyToClipboard(isPassword ? decrypt(value) : value)} className="opacity-0 group-hover/cell:opacity-100 p-1.5 text-slate-300 hover:text-blue-600 hover:bg-white rounded-lg transition-all">
+                            <Icon name="copy" size={14} />
+                        </button>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between px-1"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Contraseña</label><button type="button" onClick={() => setPersonalForm({...personalForm, password: generatePass()})} className="text-[10px] text-blue-600 font-black hover:underline">Autogenerar</button></div>
-                      <input required type="password" placeholder="••••••••" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm" value={personalForm.password} onChange={e => setPersonalForm({...personalForm, password: e.target.value})} />
+                );
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col lg:flex-row">
+                    {/* Notificaciones */}
+                    <div className={`fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transform transition-all duration-500 z-[100] border border-slate-700 ${notification ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
+                        <Icon name="check-circle" className="text-emerald-400" />
+                        <span className="text-sm font-bold">{notification}</span>
                     </div>
-                    <button className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-200 active:scale-95 transition-all">Guardar Registro</button>
-                  </form>
+
+                    <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="fixed top-6 left-6 z-[60] bg-blue-600 text-white p-3 rounded-2xl shadow-xl hover:bg-blue-700 transition-all border border-blue-500">
+                        <Icon name={isSidebarOpen ? "x" : "menu"} />
+                    </button>
+
+                    <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                        <div className="flex flex-col h-full pt-24 pb-8 px-6">
+                            <div className="flex items-center gap-3 mb-10 px-2">
+                                <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-100">
+                                    <Icon name="shield-check" size={24} />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-black text-slate-900 leading-none">KeyVault <span className="text-blue-600">KGB</span></h1>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1.5">v4.2 STABLE</p>
+                                </div>
+                            </div>
+                            <nav className="flex-1 space-y-2">
+                                <button onClick={() => setActiveTab('personal')} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-sm font-black transition-all ${activeTab === 'personal' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}>
+                                    <Icon name="mail" /> Personales
+                                </button>
+                                <button onClick={() => setActiveTab('clients')} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-sm font-black transition-all ${activeTab === 'clients' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}>
+                                    <Icon name="users" /> Clientes / Apps
+                                </button>
+                                <button onClick={() => setActiveTab('cameras')} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-sm font-black transition-all ${activeTab === 'cameras' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}>
+                                    <Icon name="cctv" /> Cámaras / Equipos
+                                </button>
+                            </nav>
+                            <div className="mt-8 pt-8 border-t border-slate-100">
+                                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-emerald-50 border-emerald-100 text-emerald-700">
+                                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-center">Cloud Engine Ready</span>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'lg:ml-72' : 'ml-0'}`}>
+                        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-6 lg:px-12 flex items-center justify-between">
+                            <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">{activeTab}</h2>
+                            <div className="flex items-center gap-3 px-5 py-2 bg-emerald-600 text-white rounded-full text-[10px] font-bold shadow-lg shadow-emerald-100">
+                                <Icon name="wifi" size={14} /> CLOUD ONLINE
+                            </div>
+                        </header>
+
+                        <div className="max-w-7xl mx-auto w-full px-6 lg:px-12 py-12">
+                            {/* SECCIÓN PERSONAL */}
+                            {activeTab === 'personal' && (
+                                <div className="grid lg:grid-cols-12 gap-10 animate-in">
+                                    <div className="lg:col-span-4">
+                                        <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-xl shadow-slate-200/40">
+                                            <h2 className="text-xl font-black text-slate-900 mb-8">Nuevo Acceso</h2>
+                                            <div className="space-y-4">
+                                                <input placeholder="Usuario / Correo" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.personal.email} onChange={e => setForms({...forms, personal: {...forms.personal, email: e.target.value}})} />
+                                                <input type="password" placeholder="Contraseña" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" value={forms.personal.password} onChange={e => setForms({...forms, personal: {...forms.personal, password: e.target.value}})} />
+                                                <button onClick={() => handleSave('personal', 'Personales', [forms.personal.email, forms.personal.password])} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Guardar Registro</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="lg:col-span-8 bg-white rounded-[40px] border border-slate-200 shadow-xl overflow-hidden">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase">
+                                                <tr><th className="px-8 py-5">Usuario</th><th className="px-8 py-5">Password</th><th className="px-8 py-5"></th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {data.personal.map(item => (
+                                                    <tr key={item.id} className="hover:bg-blue-50/20 group">
+                                                        <td className="px-8 py-6"><DataCell value={item.email} /></td>
+                                                        <td className="px-8 py-6"><DataCell value={item.password} isPassword id={item.id} /></td>
+                                                        <td className="px-8 py-6 text-right"><button onClick={() => handleDelete('personal', item.id)} className="text-slate-300 hover:text-rose-600"><Icon name="trash-2" size={16} /></button></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SECCIÓN CLIENTES */}
+                            {activeTab === 'clients' && (
+                                <div className="space-y-10 animate-in">
+                                    <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-xl">
+                                        <h2 className="text-2xl font-black text-slate-900 mb-8 flex items-center gap-4"><Icon name="users" className="text-blue-600" /> Gestión de Clientes</h2>
+                                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            <input placeholder="Nombre Cliente" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.clientName} onChange={e => setForms({...forms, clients: {...forms.clients, clientName: e.target.value}})} />
+                                            <input placeholder="Email / Teléfono" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.emailPhone} onChange={e => setForms({...forms, clients: {...forms.clients, emailPhone: e.target.value}})} />
+                                            <input type="password" placeholder="Pass Cifrado" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.encryptPass} onChange={e => setForms({...forms, clients: {...forms.clients, encryptPass: e.target.value}})} />
+                                            <input type="password" placeholder="Pass App" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.appPass} onChange={e => setForms({...forms, clients: {...forms.clients, appPass: e.target.value}})} />
+                                            <input placeholder="Etiquetas (comas)" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={forms.clients.tags} onChange={e => setForms({...forms, clients: {...forms.clients, tags: e.target.value}})} />
+                                            <button onClick={() => handleSave('clients', 'Clientes', [forms.clients.clientName, forms.clients.emailPhone, forms.clients.encryptPass, forms.clients.appPass, forms.clients.tags])} className="w-full h-[58px] bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all">Guardar Cliente</button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-[48px] border border-slate-200 shadow-xl overflow-hidden">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase">
+                                                <tr><th className="px-8 py-5">Cliente</th><th className="px-8 py-5">Acceso</th><th className="px-8 py-5">App Pass</th><th className="px-8 py-5">Tags</th><th className="px-8 py-5"></th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {data.clients.map(item => (
+                                                    <tr key={item.id} className="hover:bg-slate-50 group">
+                                                        <td className="px-8 py-6"><DataCell value={item.clientName} subValue={new Date(item.createdAt).toLocaleDateString()} /></td>
+                                                        <td className="px-8 py-6"><DataCell value={item.emailPhone} /></td>
+                                                        <td className="px-8 py-6"><DataCell value={item.appPass} isPassword id={item.id+'app'} /></td>
+                                                        <td className="px-8 py-6">
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {item.tags?.split(',').map((t, i) => <span key={i} className="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">{t.trim()}</span>)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-8 py-6 text-right"><button onClick={() => handleDelete('clients', item.id)} className="text-slate-300 hover:text-rose-600"><Icon name="trash-2" size={16} /></button></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SECCIÓN CÁMARAS */}
+                            {activeTab === 'cameras' && (
+                                <div className="space-y-10 animate-in">
+                                    <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-xl">
+                                        <h2 className="text-2xl font-black text-slate-900 mb-8 flex items-center gap-4"><Icon name="cctv" className="text-blue-600" /> Equipamiento IP KGB</h2>
+                                        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                            <input placeholder="Cliente" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.clientName} onChange={e => setForms({...forms, cameras: {...forms.cameras, clientName: e.target.value}})} />
+                                            <input placeholder="Modelo" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.model} onChange={e => setForms({...forms, cameras: {...forms.cameras, model: e.target.value}})} />
+                                            <input placeholder="Nº Serie" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.serial} onChange={e => setForms({...forms, cameras: {...forms.cameras, serial: e.target.value}})} />
+                                            <input placeholder="Dirección IP" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.ip} onChange={e => setForms({...forms, cameras: {...forms.cameras, ip: e.target.value}})} />
+                                            <input placeholder="Activación" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.activationCode} onChange={e => setForms({...forms, cameras: {...forms.cameras, activationCode: e.target.value}})} />
+                                            <input placeholder="Ubicación" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.location} onChange={e => setForms({...forms, cameras: {...forms.cameras, location: e.target.value}})} />
+                                            <input type="date" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm text-slate-400" value={forms.cameras.installationDate} onChange={e => setForms({...forms, cameras: {...forms.cameras, installationDate: e.target.value}})} />
+                                            <input placeholder="Observaciones" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" value={forms.cameras.observations} onChange={e => setForms({...forms, cameras: {...forms.cameras, observations: e.target.value}})} />
+                                            <button onClick={() => handleSave('cameras', 'Equipos', [forms.cameras.installationDate, forms.cameras.clientName, forms.cameras.model, forms.cameras.serial, forms.cameras.ip, forms.cameras.activationCode, forms.cameras.location, forms.cameras.observations])} className="lg:col-span-2 w-full h-[52px] bg-slate-900 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all">Guardar Equipo IP</button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-[48px] border border-slate-200 shadow-xl overflow-hidden">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase">
+                                                <tr><th className="px-8 py-5">Equipo / Cliente</th><th className="px-8 py-5">Serie e IP</th><th className="px-8 py-5">Detalles</th><th className="px-8 py-5"></th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {data.cameras.map(item => (
+                                                    <tr key={item.id} className="hover:bg-slate-50 group align-top">
+                                                        <td className="px-8 py-6"><div className="font-black text-sm">{item.model}</div><div className="text-[10px] text-blue-600 font-bold uppercase">{item.clientName}</div><div className="text-[9px] text-slate-400 mt-1">{item.installationDate}</div></td>
+                                                        <td className="px-8 py-6"><div className="space-y-3"><DataCell value={item.serial} subValue="Serial" isCode icon="hash" /><DataCell value={item.ip} subValue="IP" isCode icon="globe" /></div></td>
+                                                        <td className="px-8 py-6"><div className="space-y-2"><DataCell value={item.location} subValue="Ubicación" icon="map-pin" />{item.observations && <div className="mt-1 p-2 bg-slate-50 rounded-lg text-[11px] font-medium text-slate-600">{item.observations}</div>}</div></td>
+                                                        <td className="px-8 py-6 text-right"><button onClick={() => handleDelete('cameras', item.id)} className="text-slate-300 hover:text-rose-600"><Icon name="trash-2" size={16} /></button></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </main>
+                    <footer className="fixed bottom-0 right-0 p-8 text-slate-400 text-[10px] font-black uppercase pointer-events-none">KeyVault KGB • 2026</footer>
                 </div>
-              </div>
-              <div className="lg:col-span-8 bg-white rounded-[40px] border border-slate-200 shadow-xl overflow-hidden">
-                <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center"><h3 className="font-black text-slate-900 uppercase text-xs tracking-[0.2em] flex items-center gap-3"><Mail size={18} className="text-blue-600" /> Mis Cuentas Personales</h3><span className="text-[10px] bg-slate-200 px-3 py-1 rounded-full font-black text-slate-600 uppercase">{personalData.length} items</span></div>
-                <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest"><tr><th className="px-8 py-5">Usuario</th><th className="px-8 py-5">Contraseña</th><th className="px-8 py-5 w-20"></th></tr></thead><tbody className="divide-y divide-slate-100">{personalData.map(item => (<tr key={item.id} className="hover:bg-blue-50/20 group transition-all"><td className="px-8 py-6"><DataCell value={item.email} /></td><td className="px-8 py-6"><DataCell value={item.password} isPassword isVisible={showPasswordMap[item.id]} onToggle={() => toggleVisibility(item.id)} /></td><td className="px-8 py-6 text-right"><button onClick={() => handleDelete('personal', item.id)} className="p-2.5 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all active:scale-90"><Trash2 size={16} /></button></td></tr>))}</tbody></table></div>
-              </div>
-            </div>
-          )}
+            );
+        };
 
-          {activeTab === 'clients' && (
-            <div className="space-y-12 animate-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-xl">
-                <h2 className="text-2xl font-black text-slate-900 mb-10 flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg"><Users size={24} /></div>Gestión de Clientes y Apps</h2>
-                <form onSubmit={(e) => { e.preventDefault(); handleSave('clients', { ...clientForm, encryptPass: encrypt(clientForm.encryptPass), appPass: encrypt(clientForm.appPass), tags: clientForm.tags.split(',').map(t=>t.trim()).filter(t=>t) }, () => setClientForm({clientName:'', emailPhone:'', encryptPass:'', appPass:'', tags:''}), 'Clientes', [clientForm.clientName, clientForm.emailPhone, clientForm.encryptPass, clientForm.appPass, clientForm.tags]); }} className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {[{ label: 'Nombre Cliente / Perfil', key: 'clientName', ph: 'Ej. Juan Pérez' }, { label: 'Email / Teléfono', key: 'emailPhone', ph: '+34 000 000 000' }].map(f => (
-                    <div key={f.key} className="space-y-2"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">{f.label}</label><input required type="text" placeholder={f.ph} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm" value={clientForm[f.key]} onChange={e => setClientForm({...clientForm, [f.key]: e.target.value})} /></div>
-                  ))}
-                  <div className="space-y-2"><div className="flex justify-between px-1"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Pass Cifrado</label><button type="button" onClick={() => setClientForm({...clientForm, encryptPass: generatePass()})} className="text-[10px] text-blue-600 font-black hover:underline">Auto</button></div><input required type="password" placeholder="••••••••" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm" value={clientForm.encryptPass} onChange={e => setClientForm({...clientForm, encryptPass: e.target.value})} /></div>
-                  <div className="space-y-2"><div className="flex justify-between px-1"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Pass App</label><button type="button" onClick={() => setClientForm({...clientForm, appPass: generatePass()})} className="text-[10px] text-blue-600 font-black hover:underline">Auto</button></div><input required type="password" placeholder="••••••••" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm" value={clientForm.appPass} onChange={e => setClientForm({...clientForm, appPass: e.target.value})} /></div>
-                  <div className="space-y-2"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Etiquetas</label><input type="text" placeholder="Hikvision, Oficina" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 shadow-sm" value={clientForm.tags} onChange={e => setClientForm({...clientForm, tags: e.target.value})} /></div>
-                  <div className="flex items-end"><button className="w-full h-[58px] bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all"><Plus size={20} /> Guardar Cliente</button></div>
-                </form>
-              </div>
-              <div className="bg-white rounded-[48px] border border-slate-200 shadow-xl overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]"><tr><th className="px-10 py-5">Cliente</th><th className="px-10 py-5">Acceso</th><th className="px-10 py-5">Cifrado</th><th className="px-10 py-5">App</th><th className="px-10 py-5">Tags</th><th className="px-10 py-5 w-20"></th></tr></thead><tbody className="divide-y divide-slate-100">{clientData.map(item => (<tr key={item.id} className="hover:bg-blue-50/10 group transition-all"><td className="px-10 py-6"><DataCell value={item.clientName} subValue={new Date(item.createdAt).toLocaleDateString()} /></td><td className="px-10 py-6"><DataCell value={item.emailPhone} /></td><td className="px-10 py-6"><DataCell value={item.encryptPass} isPassword isCode isVisible={showPasswordMap[item.id+'_c']} onToggle={() => toggleVisibility(item.id+'_c')} /></td><td className="px-10 py-6"><DataCell value={item.appPass} isPassword isVisible={showPasswordMap[item.id+'_a']} onToggle={() => toggleVisibility(item.id+'_a')} /></td><td className="px-10 py-6"><div className="flex flex-wrap gap-1.5">{item.tags?.map((tag, i) => (<span key={i} className="text-[10px] bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full font-black uppercase tracking-tighter border border-blue-100/50">{tag}</span>))}</div></td><td className="px-10 py-6 text-right"><button onClick={() => handleDelete('clients', item.id)} className="p-2.5 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button></td></tr>))}</tbody></table></div></div>
-            </div>
-          )}
-
-          {activeTab === 'cameras' && (
-            <div className="space-y-12 animate-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-xl">
-                <h2 className="text-2xl font-black text-slate-900 mb-10 flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white shadow-lg"><Cctv size={24} /></div>Equipamiento IP KGB</h2>
-                <form onSubmit={(e) => { e.preventDefault(); handleSave('cameras', cameraForm, () => setCameraForm({clientName:'', model:'', serial:'', activationCode:'', location:'', ip: '', installationDate: '', observations: ''}), 'Equipos', [cameraForm.installationDate, cameraForm.clientName, cameraForm.model, cameraForm.serial, cameraForm.ip, cameraForm.activationCode, cameraForm.location, cameraForm.observations]); }} className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {[
-                    { label: 'Cliente', key: 'clientName', ph: 'Ej. Oficina Principal', type: 'text' }, 
-                    { label: 'Modelo Cámara/DVR', key: 'model', ph: 'Ej. DS-2CD...', type: 'text' }, 
-                    { label: 'Nº de Serie', key: 'serial', ph: 'C123...', type: 'text' }, 
-                    { label: 'Dirección IP', key: 'ip', ph: '192.168...', type: 'text' }, 
-                    { label: 'Código Activación', key: 'activationCode', ph: 'ABC...', type: 'text' }, 
-                    { label: 'Ubicación', key: 'location', ph: 'Entrada...', type: 'text' }, 
-                    { label: 'Fecha Instalación', key: 'installationDate', ph: '', type: 'date' }
-                  ].map(f => (
-                    <div key={f.key} className="space-y-2"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">{f.label}</label><input required type={f.type} className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white shadow-sm" value={cameraForm[f.key]} onChange={e => setCameraForm({...cameraForm, [f.key]: e.target.value})} /></div>
-                  ))}
-                  <div className="space-y-2 lg:col-span-2"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Observaciones</label><input type="text" placeholder="..." className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 focus:bg-white shadow-sm" value={cameraForm.observations} onChange={e => setCameraForm({...cameraForm, observations: e.target.value})} /></div>
-                  <div className="flex items-end lg:col-span-2"><button className="w-full h-[52px] bg-slate-900 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all"><Database size={20} /> Guardar Equipo IP</button></div>
-                </form>
-              </div>
-
-              <div className="bg-white rounded-[48px] border border-slate-200 shadow-xl overflow-hidden">
-                <div className="px-10 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center"><h3 className="font-black text-slate-900 uppercase text-xs tracking-[0.2em] flex items-center gap-3"><ClipboardList size={18} className="text-blue-600" /> Historial de Equipos</h3></div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left table-fixed">
-                    <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100"><tr><th className="px-10 py-5 w-[25%]">Equipo / Cliente</th><th className="px-10 py-5 w-[20%]">Serie e IP</th><th className="px-10 py-5 w-[15%] text-center">Instalación</th><th className="px-10 py-5 w-[30%]">Detalles</th><th className="px-10 py-5 w-[10%] text-right"></th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {cameraData.map(item => (
-                        <tr key={item.id} className="hover:bg-slate-50/50 group transition-all align-top">
-                          <td className="px-10 py-6"><div className="flex flex-col gap-1"><span className="text-sm font-black text-slate-900 leading-tight">{item.model}</span><div className="flex items-center gap-1.5 text-[10px] text-blue-600 font-bold uppercase"><Users size={10}/> {item.clientName}</div></div></td>
-                          <td className="px-10 py-6"><div className="flex flex-col gap-3"><DataCell value={item.serial} subValue="Serial" isCode icon={Hash} /><DataCell value={item.ip || '0.0.0.0'} subValue="IP" isCode icon={Globe} /></div></td>
-                          <td className="px-10 py-6 text-center"><div className="inline-flex flex-col items-center gap-1"><div className="p-2 bg-blue-50 text-blue-600 rounded-xl mb-1"><Calendar size={14}/></div><span className="text-[11px] font-black text-slate-700">{item.installationDate || 'N/A'}</span></div></td>
-                          <td className="px-10 py-6"><div className="flex flex-col gap-3"><DataCell value={item.location || 'N/A'} subValue="Ubicación" icon={MapPin} />{item.activationCode && <DataCell value={item.activationCode} subValue="Cód. Activación" isCode icon={Key} />}{item.observations && <div className="mt-1 p-3 bg-slate-50 border border-slate-100 rounded-xl"><p className="text-xs font-medium text-slate-600 leading-relaxed">{item.observations}</p></div>}</div></td>
-                          <td className="px-10 py-6 text-right"><button onClick={() => handleDelete('cameras', item.id)} className="p-3 text-slate-300 hover:text-rose-600 bg-white border border-slate-100 rounded-2xl shadow-sm opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18} /></button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-
-      <footer className="fixed bottom-0 right-0 p-8 text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] pointer-events-none">KeyVault KGB • 2026</footer>
-    </div>
-  );
-};
-
-export default App;
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
