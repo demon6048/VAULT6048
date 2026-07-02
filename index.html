@@ -456,10 +456,22 @@
         async function forceSync() { if(!GAS_WEB_APP_URL) return showToast("Falta URL de Google", "error"); await syncData(false); }
         async function syncData(silent = true) {
             try {
-                const resC = await apiCall('list', 'correos', null, silent); const resH = await apiCall('list', 'hikconnect', null, silent); const resE = await apiCall('list', 'equipos', null, silent);
-                if(resC?.success) state.correos = resC.data; if(resH?.success) state.hikconnect = resH.data; if(resE?.success) state.equipos = resE.data;
-                renderAll(); if(!silent && isConnected) showToast("Sincronización completa", "success");
-            } catch(e) {}
+                // OPTIMIZACIÓN: Descargar las 3 bases de datos de forma paralela (Sincronización 3 veces más rápida)
+                const [resC, resH, resE] = await Promise.all([
+                    apiCall('list', 'correos', null, silent),
+                    apiCall('list', 'hikconnect', null, silent),
+                    apiCall('list', 'equipos', null, silent)
+                ]);
+                
+                if(resC?.success) state.correos = resC.data; 
+                if(resH?.success) state.hikconnect = resH.data; 
+                if(resE?.success) state.equipos = resE.data;
+                
+                renderAll(); 
+                if(!silent && isConnected) showToast("Sincronización rápida exitosa", "success");
+            } catch(e) {
+                if(!silent) showToast("Error al sincronizar", "error");
+            }
         }
 
         /* ====================================================
@@ -653,35 +665,42 @@
         }
 
         function sendWhatsApp(id) {
-            const data = state.hikconnect.find(r => r.id === id);
-            if(!data || !data.whatsappCliente) return showToast("No hay WhatsApp registrado", "error");
-            
-            // Formateo automático para números de Perú
-            let phone = data.whatsappCliente.replace(/\D/g,'');
-            // Si el usuario ingresó solo los 9 dígitos, le agregamos el '51' de Perú automáticamente
-            if (phone.length === 9) {
-                phone = '51' + phone;
+            try {
+                const data = state.hikconnect.find(r => r.id === id);
+                if(!data) return showToast("Registro no encontrado", "error");
+                
+                let rawPhone = data.whatsappCliente;
+                if(!rawPhone || String(rawPhone).trim() === '') {
+                    return showToast("No hay WhatsApp registrado", "error");
+                }
+                
+                // Conversión segura a Texto (por si Sheets lo manda como Number) y formateo para Perú
+                let phone = String(rawPhone).replace(/\D/g,'');
+                if (phone.length === 9) {
+                    phone = '51' + phone;
+                }
+                
+                // Validación para evitar que campos nulos rompan el texto
+                const name = data.nombreCliente || 'Cliente';
+                const hikU = data.usuarioHikconnect || 'N/A';
+                const hikP = data.passwordHikconnect || 'N/A';
+                const cifrado = data.passwordCifrado || 'N/A';
+                const dvrU = data.usuarioDvrLocal || 'N/A';
+                const dvrP = data.passwordDvrLocal || 'N/A';
+                
+                const msg = `Estimado(a) *${name}*, le saludamos cordialmente de *KGB SECURITY* 🛡️.\n\nNos comunicamos para informarle que hemos registrado y respaldado de forma segura las credenciales de sus equipos de videovigilancia.\n\nQueremos asegurarle que esta información será tratada con la más estricta confidencialidad y será utilizada *única y exclusivamente* para brindarle un soporte técnico rápido y eficiente cuando lo requiera.\n\nSus accesos registrados para soporte son:\n👤 *Usuario HIK:* ${hikU}\n🔑 *Pass HIK:* ${hikP}\n🔐 *Cifrado:* ${cifrado}\n👤 *Usuario DVR:* ${dvrU}\n🔑 *Pass DVR:* ${dvrP}\n\nPor su seguridad, le recomendamos no compartir estos datos con terceros no autorizados. ¡Quedamos a su entera disposición!`;
+                
+                const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`;
+                
+                // Bypass para navegadores que bloquean ventanas emergentes (Pop-ups)
+                let opened = window.open(url, '_blank');
+                if (!opened) {
+                    window.location.href = url; // Fallback: Abre en la misma pestaña si hay bloqueo estricto
+                }
+            } catch(error) {
+                console.error("Error de WhatsApp:", error);
+                showToast("Error interno al abrir WhatsApp", "error");
             }
-            
-            // Validamos que si un campo está vacío, muestre "N/A" (No Aplica) en lugar de romper el texto
-            const name = data.nombreCliente || 'Cliente';
-            const hikU = data.usuarioHikconnect || 'N/A';
-            const hikP = data.passwordHikconnect || 'N/A';
-            const cifrado = data.passwordCifrado || 'N/A';
-            const dvrU = data.usuarioDvrLocal || 'N/A';
-            const dvrP = data.passwordDvrLocal || 'N/A';
-            
-            // Mensaje profesional y prudente
-            const msg = `Estimado(a) *${name}*, le saludamos cordialmente de *KGB SECURITY* 🛡️.\n\nNos comunicamos para informarle que hemos registrado y respaldado de forma segura las credenciales de sus equipos de videovigilancia.\n\nQueremos asegurarle que esta información será tratada con la más estricta confidencialidad y será utilizada *única y exclusivamente* para brindarle un soporte técnico rápido y eficiente cuando lo requiera.\n\nSus accesos registrados para soporte son:\n👤 *Usuario HIK:* ${hikU}\n🔑 *Pass HIK:* ${hikP}\n🔐 *Cifrado:* ${cifrado}\n👤 *Usuario DVR:* ${dvrU}\n🔑 *Pass DVR:* ${dvrP}\n\nPor su seguridad, le recomendamos no compartir estos datos con terceros no autorizados. ¡Quedamos a su entera disposición!`;
-            
-            // Método más seguro para evitar bloqueos de ventanas emergentes (Pop-ups)
-            const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`;
-            const link = document.createElement('a');
-            link.href = url;
-            link.target = '_blank';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
         }
 
         function openModal(id) {
