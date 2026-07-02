@@ -655,9 +655,33 @@
         function sendWhatsApp(id) {
             const data = state.hikconnect.find(r => r.id === id);
             if(!data || !data.whatsappCliente) return showToast("No hay WhatsApp registrado", "error");
-            const phone = data.whatsappCliente.replace(/\D/g,'');
-            const msg = `Estimado(a) ${data.nombreCliente}, le saluda KGB SECURITY.\nLe compartimos sus accesos:\nUser HIK: ${data.usuarioHikconnect}\nPass HIK: ${data.passwordHikconnect}\nCifrado: ${data.passwordCifrado}\nUser DVR: ${data.usuarioDvrLocal}\nPass DVR: ${data.passwordDvrLocal}`;
-            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+            
+            // Formateo automático para números de Perú
+            let phone = data.whatsappCliente.replace(/\D/g,'');
+            // Si el usuario ingresó solo los 9 dígitos, le agregamos el '51' de Perú automáticamente
+            if (phone.length === 9) {
+                phone = '51' + phone;
+            }
+            
+            // Validamos que si un campo está vacío, muestre "N/A" (No Aplica) en lugar de romper el texto
+            const name = data.nombreCliente || 'Cliente';
+            const hikU = data.usuarioHikconnect || 'N/A';
+            const hikP = data.passwordHikconnect || 'N/A';
+            const cifrado = data.passwordCifrado || 'N/A';
+            const dvrU = data.usuarioDvrLocal || 'N/A';
+            const dvrP = data.passwordDvrLocal || 'N/A';
+            
+            // Mensaje profesional y prudente
+            const msg = `Estimado(a) *${name}*, le saludamos cordialmente de *KGB SECURITY* 🛡️.\n\nNos comunicamos para informarle que hemos registrado y respaldado de forma segura las credenciales de sus equipos de videovigilancia.\n\nQueremos asegurarle que esta información será tratada con la más estricta confidencialidad y será utilizada *única y exclusivamente* para brindarle un soporte técnico rápido y eficiente cuando lo requiera.\n\nSus accesos registrados para soporte son:\n👤 *Usuario HIK:* ${hikU}\n🔑 *Pass HIK:* ${hikP}\n🔐 *Cifrado:* ${cifrado}\n👤 *Usuario DVR:* ${dvrU}\n🔑 *Pass DVR:* ${dvrP}\n\nPor su seguridad, le recomendamos no compartir estos datos con terceros no autorizados. ¡Quedamos a su entera disposición!`;
+            
+            // Método más seguro para evitar bloqueos de ventanas emergentes (Pop-ups)
+            const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`;
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function openModal(id) {
