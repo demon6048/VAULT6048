@@ -58,12 +58,19 @@
 
         .header-actions { display: flex; gap: 10px; align-items: center; }
         
+        /* SISTEMA DE ETIQUETAS DE CONEXIÓN REHECHO */
         .status-badge {
             padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; transition: all 0.3s;
+        }
+        .status-badge.online {
             background-color: rgba(0, 255, 102, 0.1); border: 1px solid var(--green-active); color: var(--green-active);
         }
-        .status-badge.preview {
-            background-color: rgba(255, 42, 85, 0.1); border-color: var(--danger); color: var(--danger);
+        .status-badge.sync {
+            background-color: rgba(0, 229, 255, 0.1); border: 1px solid var(--cyan-btn-1); color: var(--cyan-btn-1);
+        }
+        .status-badge.error {
+            background-color: rgba(255, 42, 85, 0.1); border: 1px solid var(--danger); color: var(--danger);
         }
 
         /* --- NAVEGACIÓN --- */
@@ -199,9 +206,10 @@
         .btn-gradient {
             background: linear-gradient(90deg, var(--cyan-btn-1) 0%, var(--cyan-btn-2) 100%); color: #000;
             border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: 900;
-            text-transform: uppercase; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 229, 255, 0.2); display: flex; align-items: center; gap: 5px;
+            text-transform: uppercase; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 229, 255, 0.2); display: flex; align-items: center; gap: 5px; transition: all 0.2s;
         }
         .btn-gradient:hover { box-shadow: 0 4px 12px rgba(0, 229, 255, 0.4); transform: scale(1.02); }
+        .btn-gradient:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
 
         .svg-icon { width: 14px; height: 14px; fill: currentColor; }
 
@@ -237,6 +245,8 @@
         /* Toasts */
         #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
         .toast { background-color: var(--bg-panel); color: var(--white); padding: 12px 20px; border-radius: 4px; font-size: 13px; font-weight: bold; border-left: 3px solid var(--cyan-btn-1); animation: slideIn 0.3s ease forwards; opacity: 0; transform: translateX(100%); box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .toast.error { border-left-color: var(--danger); }
+        .toast.success { border-left-color: var(--green-active); }
         @keyframes slideIn { to { opacity: 1; transform: translateX(0); } }
 
     </style>
@@ -250,8 +260,9 @@
             <p>Registros Técnicos</p>
         </div>
         <div class="header-actions">
-            <div id="connection-status" class="status-badge preview">🔴 VISTA PREVIA</div>
-            <button class="btn-action" onclick="forceSync()">🔄</button>
+            <!-- Empezamos con estado de carga neutral -->
+            <div id="connection-status" class="status-badge sync">🔄 INICIANDO...</div>
+            <button class="btn-action" onclick="forceSync()">🔄 Forzar Sync</button>
         </div>
     </header>
 
@@ -303,7 +314,7 @@
             <div class="dashboard-grid">
                 <div class="stat-card" style="grid-column: 1 / -1; max-width: 400px; margin: 0 auto;">
                     <h4>Conexión con Apps Script</h4>
-                    <div class="value" id="dash-status" style="font-size: 16px; color: var(--danger); margin-bottom: 10px;">Desconectado</div>
+                    <div class="value" id="dash-status" style="font-size: 16px; color: var(--cyan-btn-1); margin-bottom: 10px;">Iniciando...</div>
                     <input type="text" id="config-url" placeholder="Pega URL de Google Script" class="search-bar" style="margin-bottom:10px; padding: 10px;">
                     <button class="btn-gradient" style="width: 100%; justify-content: center;" onclick="saveUrlConfig()">Vincular URL</button>
                 </div>
@@ -325,7 +336,7 @@
                 <div class="form-group"><label>Etiquetas / notas cortas</label><textarea id="correo-notas" rows="2"></textarea></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-action" onclick="closeModal('modal-correo')">Cancelar</button>
-                    <button type="submit" class="btn-gradient">Guardar</button>
+                    <button type="submit" class="btn-gradient" id="btn-submit-correo">Guardar</button>
                 </div>
             </form>
         </div>
@@ -346,12 +357,12 @@
                     <div class="form-group" style="flex:1;"><label>User DVR</label><input type="text" id="hik-userdvr"></div>
                     <div class="form-group" style="flex:1;"><label>Pass DVR</label><input type="text" id="hik-passdvr"></div>
                 </div>
-                <div class="form-group"><label>WhatsApp</label><input type="text" id="hik-whatsapp"></div>
+                <div class="form-group"><label>WhatsApp</label><input type="text" id="hik-whatsapp" placeholder="Ej: 999888777"></div>
                 <div class="form-group"><label>Etiquetas y Notas</label><textarea id="hik-notas" rows="2"></textarea></div>
                 <input type="hidden" id="hik-etiquetas" value="">
                 <div class="modal-actions">
                     <button type="button" class="btn-action" onclick="closeModal('modal-hik')">Cancelar</button>
-                    <button type="submit" class="btn-gradient">Guardar</button>
+                    <button type="submit" class="btn-gradient" id="btn-submit-hik">Guardar</button>
                 </div>
             </form>
         </div>
@@ -373,7 +384,7 @@
                 <div class="form-group"><label>Notas</label><textarea id="equipo-notas" rows="2"></textarea></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-action" onclick="closeModal('modal-equipo')">Cancelar</button>
-                    <button type="submit" class="btn-gradient">Guardar</button>
+                    <button type="submit" class="btn-gradient" id="btn-submit-equipo">Guardar</button>
                 </div>
             </form>
         </div>
@@ -382,20 +393,185 @@
     <div id="toast-container"></div>
 
     <script>
-        // CONFIGURACIÓN (URL PRE-CONFIGURADA)
-        let DEFAULT_URL = "https://script.google.com/macros/s/AKfycbzFzOFCikHThKx0VBdFxasyZX8EbRnMNPpOxYwt5U8SL8lrCbToFIYmd2DUYMwrjjUN/exec";
-        let GAS_WEB_APP_URL = localStorage.getItem('kgb_gas_url') || DEFAULT_URL;
+        // =========================================================================
+        // 1. CONFIGURACIÓN CENTRAL Y CACHÉ
+        // =========================================================================
+        const DEFAULT_URL = "https://script.google.com/macros/s/AKfycbyV2olS9mSXwWE9nHximRdlC3a1K16AxLFTboOiCCxS7l6ZQIZgPVpX9lxXTRUcOHvQ/exec";
         
+        let GAS_WEB_APP_URL = DEFAULT_URL;
         let state = { correos: [], hikconnect: [], equipos: [] };
-        let isConnected = false; let autoSyncInterval;
+        let autoSyncInterval;
 
+        // =========================================================================
+        // 2. ARRANQUE INSTANTÁNEO
+        // =========================================================================
         document.addEventListener('DOMContentLoaded', () => {
             setupNavigation();
             document.getElementById('config-url').value = GAS_WEB_APP_URL;
-            if (!GAS_WEB_APP_URL) forcePreviewMode(); else forceSync();
-            autoSyncInterval = setInterval(() => { if(GAS_WEB_APP_URL && isConnected) syncData(true); }, 30000);
+            
+            // A) Carga el caché del disco duro en 0 milisegundos para que nunca veas la pantalla vacía
+            const cachedData = localStorage.getItem('kgb_data_cache');
+            if (cachedData) {
+                try {
+                    state = JSON.parse(cachedData);
+                    renderAll(); 
+                } catch(e) {}
+            }
+            
+            // B) Esperamos 800ms antes de llamar a Google para que el navegador no cancele la petición
+            setTimeout(() => {
+                forceSync();
+            }, 800);
+            
+            // C) Auto sincronización en segundo plano cada 15 segundos
+            autoSyncInterval = setInterval(() => { syncData(true); }, 15000); 
         });
 
+        // =========================================================================
+        // 3. CONECTIVIDAD BLINDADA
+        // =========================================================================
+        function updateConnectionUI(status) {
+            const badge = document.getElementById('connection-status');
+            const dashStatus = document.getElementById('dash-status');
+            
+            if(status === 'online') { 
+                badge.className = 'status-badge online'; 
+                badge.innerHTML = '🟢 ONLINE'; 
+                dashStatus.innerHTML = 'Conectado y Actualizado'; 
+                dashStatus.style.color = 'var(--green-active)'; 
+            } else if (status === 'syncing') { 
+                badge.className = 'status-badge sync'; 
+                badge.innerHTML = '🔄 ACTUALIZANDO...'; 
+                dashStatus.innerHTML = 'Verificando Servidor...'; 
+                dashStatus.style.color = 'var(--cyan-btn-1)'; 
+            } else { 
+                badge.className = 'status-badge error'; 
+                badge.innerHTML = '🔴 OFFLINE (CACHÉ)'; 
+                dashStatus.innerHTML = 'Fallo de Red. Mostrando datos locales.'; 
+                dashStatus.style.color = 'var(--danger)'; 
+            }
+        }
+        
+        function saveUrlConfig() { 
+            const url = document.getElementById('config-url').value.trim(); 
+            GAS_WEB_APP_URL = url || DEFAULT_URL; 
+            showToast("Conectando a nueva URL...", "info"); 
+            forceSync(); 
+        }
+
+        async function apiCall(action, entity, data = null) {
+            if (!GAS_WEB_APP_URL) return { success: false }; 
+            try {
+                // Timeout de 10 segundos por si Google se cuelga
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+                const response = await fetch(GAS_WEB_APP_URL, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ action, entity, data }), 
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                return await response.json();
+            } catch (error) { 
+                return { success: false, error: error.message }; 
+            }
+        }
+
+        async function forceSync() { 
+            updateConnectionUI('syncing');
+            await syncData(false); 
+        }
+
+        async function syncData(silent = true) {
+            try {
+                // Petición maestra: descarga TODO en 1 segundo (Depende de API V2 en Code.gs)
+                const res = await apiCall('sync_all', 'all', null);
+                
+                if(res && res.success) { 
+                    state.correos = res.data.correos || []; 
+                    state.hikconnect = res.data.hikconnect || []; 
+                    state.equipos = res.data.equipos || [];
+                    
+                    // Guardamos la info nueva en el disco duro al instante
+                    localStorage.setItem('kgb_data_cache', JSON.stringify(state));
+                    
+                    renderAll(); 
+                    updateConnectionUI('online');
+                    if(!silent) showToast("Base de datos al día", "success");
+                } else {
+                    updateConnectionUI('error');
+                    if(!silent) showToast("No se pudo contactar al servidor", "error");
+                }
+            } catch(e) {
+                updateConnectionUI('error');
+            }
+        }
+
+        // =========================================================================
+        // 4. CRUD Y GUARDADO (Con bloqueo de botones)
+        // =========================================================================
+        async function saveRecord(e, entity) {
+            e.preventDefault();
+            
+            // Evitar que el usuario haga doble clic
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '⏳ Guardando...';
+            submitBtn.disabled = true;
+
+            let data = {}, modalId = '';
+            
+            if(entity === 'correos') {
+                modalId = 'modal-correo';
+                data = { id: document.getElementById('correo-id').value, correoUsuario: document.getElementById('correo-user').value, password: document.getElementById('correo-pass').value, notas: document.getElementById('correo-notas').value, etiquetas: "" };
+            } else if(entity === 'hikconnect') {
+                modalId = 'modal-hik';
+                data = { id: document.getElementById('hik-id').value, nombreCliente: document.getElementById('hik-cliente').value, usuarioHikconnect: document.getElementById('hik-userhik').value, passwordHikconnect: document.getElementById('hik-passhik').value, passwordCifrado: document.getElementById('hik-passcif').value, usuarioDvrLocal: document.getElementById('hik-userdvr').value, passwordDvrLocal: document.getElementById('hik-passdvr').value, whatsappCliente: document.getElementById('hik-whatsapp').value, etiquetas: document.getElementById('hik-etiquetas').value, notasInternas: document.getElementById('hik-notas').value };
+            } else if(entity === 'equipos') {
+                modalId = 'modal-equipo';
+                data = { id: document.getElementById('equipo-id').value, cliente: document.getElementById('equipo-cliente').value, modelo: document.getElementById('equipo-modelo').value, serial: document.getElementById('equipo-serial').value, ip: document.getElementById('equipo-ip').value, lugarInstalacion: document.getElementById('equipo-lugar').value, fecha: document.getElementById('equipo-fecha').value, notas: document.getElementById('equipo-notas').value };
+            }
+            
+            const isEdit = !!data.id; 
+            if(!isEdit) delete data.id;
+            
+            closeModal(modalId);
+            updateConnectionUI('syncing');
+            
+            const res = await apiCall(isEdit ? 'update' : 'create', entity, data);
+            
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+
+            if(res && res.success) { 
+                showToast(isEdit ? "Edición Guardada" : "Nuevo Registro Guardado", "success"); 
+                syncData(true); 
+            } else {
+                showToast("Fallo al guardar en Google", "error");
+                updateConnectionUI('error');
+            }
+        }
+
+        async function deleteRecord(entity, id) {
+            if(confirm("¿Estás 100% seguro de borrar este registro permanentemente?")) {
+                updateConnectionUI('syncing');
+                const res = await apiCall('delete', entity, {id: id});
+                if(res && res.success) { 
+                    showToast("Registro borrado", "success"); 
+                    syncData(true); 
+                } else {
+                    showToast("Error al borrar", "error");
+                    updateConnectionUI('error');
+                }
+            }
+        }
+
+        // =========================================================================
+        // 5. RENDERIZADO VISUAL
+        // =========================================================================
         function setupNavigation() {
             const items = document.querySelectorAll('.nav-btn[data-target]');
             items.forEach(item => {
@@ -407,76 +583,6 @@
             });
         }
 
-        // DATOS MOCK (Reserva por si falla la conexión)
-        function loadMockData() {
-            state.correos = []; state.hikconnect = []; state.equipos = [];
-            for(let i=1; i<=8; i++) { state.correos.push({ id: 'mock-c-'+i, createdAt: new Date().toISOString(), correoUsuario: `usuario${i}@gmail.com`, password: `PassDemo00${i}`, etiquetas: 'Personal', notas: 'correo demo' }); }
-            for(let i=1; i<=8; i++) { state.hikconnect.push({ id: 'mock-h-'+i, createdAt: new Date().toISOString(), nombreCliente: `Cliente Demo 0${i}`, usuarioHikconnect: `user_hik_${i}`, passwordHikconnect: `PassHik${i}`, passwordCifrado: `Cifrado${i}`, usuarioDvrLocal: `admin${i}`, passwordDvrLocal: `AdminDVR${i}`, whatsappCliente: `5199988877${i%10}`, etiquetas: 'VIP', notasInternas: `Nota interna ${i}` }); }
-            for(let i=1; i<=8; i++) { state.equipos.push({ id: 'mock-e-'+i, createdAt: new Date().toISOString(), cliente: `Empresa ${i} S.A.C`, modelo: `DVR Hikvision DS-720${i}`, serial: `SN9988776655${i}`, ip: `192.168.1.${100+i}`, lugarInstalacion: `Sede Principal`, fecha: new Date().toISOString().split('T')[0], notas: `Equipo de prueba` }); }
-        }
-
-        function updateConnectionUI(connected) {
-            isConnected = connected;
-            const badge = document.getElementById('connection-status');
-            const dashStatus = document.getElementById('dash-status');
-            if(connected) { badge.className = 'status-badge'; badge.innerHTML = '🟢 ONLINE'; dashStatus.innerHTML = 'Conectado a Google Sheets'; dashStatus.style.color = 'var(--green-active)'; } 
-            else { badge.className = 'status-badge preview'; badge.innerHTML = '🔴 MODO DEMO'; dashStatus.innerHTML = 'Sin Conexión'; dashStatus.style.color = 'var(--danger)'; }
-        }
-
-        function forcePreviewMode() { loadMockData(); updateConnectionUI(false); renderAll(); }
-        
-        function saveUrlConfig() { 
-            const url = document.getElementById('config-url').value.trim(); 
-            localStorage.setItem('kgb_gas_url', url); 
-            GAS_WEB_APP_URL = url; 
-            showToast("URL guardada", "info"); 
-            forceSync(); 
-        }
-
-        async function apiCall(action, entity, data = null, silent = false) {
-            if (!GAS_WEB_APP_URL) return simulateApi(action, entity, data);
-            try {
-                const response = await fetch(GAS_WEB_APP_URL, { method: 'POST', body: JSON.stringify({ action, entity, data }), headers: { 'Content-Type': 'text/plain' } });
-                const result = await response.json();
-                if(result.success) { updateConnectionUI(true); return result; } else throw new Error(result.message);
-            } catch (error) { updateConnectionUI(false); return simulateApi(action, entity, data); }
-        }
-
-        function simulateApi(action, entity, data) {
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    if(action === 'list') resolve({success: true, data: state[entity]});
-                    else if(action === 'create') { data.id = 'loc-' + Math.random().toString(36).substr(2, 9); data.createdAt = new Date().toISOString(); state[entity].push(data); resolve({success: true}); }
-                    else if(action === 'update') { const idx = state[entity].findIndex(e => e.id === data.id); if(idx !== -1) state[entity][idx] = {...state[entity][idx], ...data}; resolve({success: true}); }
-                    else if(action === 'delete') { state[entity] = state[entity].filter(e => e.id !== data.id); resolve({success: true}); }
-                }, 100);
-            });
-        }
-
-        async function forceSync() { if(!GAS_WEB_APP_URL) return showToast("Falta URL de Google", "error"); await syncData(false); }
-        async function syncData(silent = true) {
-            try {
-                // OPTIMIZACIÓN: Descargar las 3 bases de datos de forma paralela (Sincronización 3 veces más rápida)
-                const [resC, resH, resE] = await Promise.all([
-                    apiCall('list', 'correos', null, silent),
-                    apiCall('list', 'hikconnect', null, silent),
-                    apiCall('list', 'equipos', null, silent)
-                ]);
-                
-                if(resC?.success) state.correos = resC.data; 
-                if(resH?.success) state.hikconnect = resH.data; 
-                if(resE?.success) state.equipos = resE.data;
-                
-                renderAll(); 
-                if(!silent && isConnected) showToast("Sincronización rápida exitosa", "success");
-            } catch(e) {
-                if(!silent) showToast("Error al sincronizar", "error");
-            }
-        }
-
-        /* ====================================================
-           RENDERIZADO LISTA HORIZONTAL (Fila Única)
-           ==================================================== */
         function renderAll() { renderCorreos(); renderHik(); renderEquipos(); renderDashboard(); }
 
         function renderCorreos() {
@@ -485,26 +591,13 @@
                 list.innerHTML += `
                 <div class="list-row search-item">
                     <div class="row-info">
-                        <div class="row-title">
-                            ${escapeHTML(row.correoUsuario)}
-                            <span class="badge-active-mini">ACTIVO</span>
-                        </div>
-                        <div class="row-subtitle">${row.createdAt ? new Date(row.createdAt).toLocaleDateString() : 'Sin fecha'}</div>
+                        <div class="row-title">${escapeHTML(row.correoUsuario)} <span class="badge-active-mini">ACTIVO</span></div>
+                        <div class="row-subtitle">${row.createdAt ? new Date(row.createdAt).toLocaleDateString() : ''}</div>
                     </div>
-                    
                     <div class="row-creds">
-                        <div class="cred-box">
-                            <span class="c-lbl">USER</span>
-                            <span class="c-val" title="${escapeHTML(row.correoUsuario)}">${escapeHTML(row.correoUsuario)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.correoUsuario)}')">📋</button>
-                        </div>
-                        <div class="cred-box">
-                            <span class="c-lbl">PASS</span>
-                            <span class="c-val" title="${escapeHTML(row.password)}">${escapeHTML(row.password)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.password)}')">🔑</button>
-                        </div>
+                        <div class="cred-box"><span class="c-lbl">USER</span><span class="c-val" title="${escapeHTML(row.correoUsuario)}">${escapeHTML(row.correoUsuario)}</span><button onclick="copyToClipboard('${escapeJS(row.correoUsuario)}')">📋</button></div>
+                        <div class="cred-box"><span class="c-lbl">PASS</span><span class="c-val" title="${escapeHTML(row.password)}">${escapeHTML(row.password)}</span><button onclick="copyToClipboard('${escapeJS(row.password)}')">🔑</button></div>
                     </div>
-
                     <div class="row-actions">
                         ${row.etiquetas || row.notas ? `<div class="bar-green" title="${escapeHTML(row.etiquetas)} | ${escapeHTML(row.notas)}">${escapeHTML(row.etiquetas || row.notas)}</div>` : ''}
                         <button class="btn-action" onclick="prepareEdit('correos', '${row.id}')">✏️ Edit</button>
@@ -520,41 +613,15 @@
                 list.innerHTML += `
                 <div class="list-row search-item">
                     <div class="row-info">
-                        <div class="row-title">
-                            ${escapeHTML(row.nombreCliente)}
-                            <span class="badge-active-mini">ACTIVO</span>
-                        </div>
+                        <div class="row-title">${escapeHTML(row.nombreCliente)} <span class="badge-active-mini">ACTIVO</span></div>
                     </div>
-                    
                     <div class="row-creds">
-                        <div class="cred-box">
-                            <span class="c-lbl">HIK U</span>
-                            <span class="c-val" title="${escapeHTML(row.usuarioHikconnect)}">${escapeHTML(row.usuarioHikconnect)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.usuarioHikconnect)}')">📋</button>
-                        </div>
-                        <div class="cred-box">
-                            <span class="c-lbl">HIK P</span>
-                            <span class="c-val" title="${escapeHTML(row.passwordHikconnect)}">${escapeHTML(row.passwordHikconnect)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.passwordHikconnect)}')">🔑</button>
-                        </div>
-                        <div class="cred-box">
-                            <span class="c-lbl">DVR U</span>
-                            <span class="c-val" title="${escapeHTML(row.usuarioDvrLocal)}">${escapeHTML(row.usuarioDvrLocal)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.usuarioDvrLocal)}')">📋</button>
-                        </div>
-                        <div class="cred-box">
-                            <span class="c-lbl">DVR P</span>
-                            <span class="c-val" title="${escapeHTML(row.passwordDvrLocal)}">${escapeHTML(row.passwordDvrLocal)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.passwordDvrLocal)}')">🔑</button>
-                        </div>
-                        ${row.passwordCifrado ? `
-                        <div class="cred-box">
-                            <span class="c-lbl">CIFRAD</span>
-                            <span class="c-val" title="${escapeHTML(row.passwordCifrado)}">${escapeHTML(row.passwordCifrado)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.passwordCifrado)}')">🔑</button>
-                        </div>` : ''}
+                        <div class="cred-box"><span class="c-lbl">HIK U</span><span class="c-val">${escapeHTML(row.usuarioHikconnect)}</span><button onclick="copyToClipboard('${escapeJS(row.usuarioHikconnect)}')">📋</button></div>
+                        <div class="cred-box"><span class="c-lbl">HIK P</span><span class="c-val">${escapeHTML(row.passwordHikconnect)}</span><button onclick="copyToClipboard('${escapeJS(row.passwordHikconnect)}')">🔑</button></div>
+                        <div class="cred-box"><span class="c-lbl">DVR U</span><span class="c-val">${escapeHTML(row.usuarioDvrLocal)}</span><button onclick="copyToClipboard('${escapeJS(row.usuarioDvrLocal)}')">📋</button></div>
+                        <div class="cred-box"><span class="c-lbl">DVR P</span><span class="c-val">${escapeHTML(row.passwordDvrLocal)}</span><button onclick="copyToClipboard('${escapeJS(row.passwordDvrLocal)}')">🔑</button></div>
+                        ${row.passwordCifrado ? `<div class="cred-box"><span class="c-lbl">CIFRAD</span><span class="c-val">${escapeHTML(row.passwordCifrado)}</span><button onclick="copyToClipboard('${escapeJS(row.passwordCifrado)}')">🔑</button></div>` : ''}
                     </div>
-
                     <div class="row-actions">
                         ${row.etiquetas || row.notasInternas ? `<div class="bar-green" title="${escapeHTML(row.notasInternas)}">${escapeHTML(row.etiquetas || 'HIK')}</div>` : ''}
                         <button class="btn-gradient" onclick="sendWhatsApp('${row.id}')">
@@ -574,26 +641,13 @@
                 list.innerHTML += `
                 <div class="list-row search-item">
                     <div class="row-info">
-                        <div class="row-title">
-                            ${escapeHTML(row.cliente)}
-                            <span class="badge-active-mini">ACTIVO</span>
-                        </div>
+                        <div class="row-title">${escapeHTML(row.cliente)} <span class="badge-active-mini">ACTIVO</span></div>
                         <div class="row-subtitle">${escapeHTML(row.modelo)} | ${escapeHTML(row.lugarInstalacion)}</div>
                     </div>
-                    
                     <div class="row-creds">
-                        <div class="cred-box">
-                            <span class="c-lbl" style="background:#0a0a0a">SN</span>
-                            <span class="c-val" style="color:var(--white)" title="${escapeHTML(row.serial)}">${escapeHTML(row.serial)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.serial)}')">📋</button>
-                        </div>
-                        <div class="cred-box">
-                            <span class="c-lbl" style="background:#0a0a0a">IP</span>
-                            <span class="c-val" style="color:var(--white)" title="${escapeHTML(row.ip)}">${escapeHTML(row.ip)}</span>
-                            <button onclick="copyToClipboard('${escapeJS(row.ip)}')">📋</button>
-                        </div>
+                        <div class="cred-box"><span class="c-lbl" style="background:#0a0a0a">SN</span><span class="c-val" style="color:var(--white)">${escapeHTML(row.serial)}</span><button onclick="copyToClipboard('${escapeJS(row.serial)}')">📋</button></div>
+                        <div class="cred-box"><span class="c-lbl" style="background:#0a0a0a">IP</span><span class="c-val" style="color:var(--white)">${escapeHTML(row.ip)}</span><button onclick="copyToClipboard('${escapeJS(row.ip)}')">📋</button></div>
                     </div>
-
                     <div class="row-actions">
                         <button class="btn-action" onclick="prepareEdit('equipos', '${row.id}')">✏️ Edit</button>
                         <button class="btn-action" style="color:var(--danger)" onclick="deleteRecord('equipos', '${row.id}')">🗑️</button>
@@ -613,25 +667,6 @@
             document.querySelectorAll(`#${listId} .search-item`).forEach(row => {
                 row.style.display = row.innerText.toLowerCase().includes(lowerQuery) ? '' : 'none';
             });
-        }
-
-        async function saveRecord(e, entity) {
-            e.preventDefault();
-            let data = {}, modalId = '';
-            if(entity === 'correos') {
-                modalId = 'modal-correo';
-                data = { id: document.getElementById('correo-id').value, correoUsuario: document.getElementById('correo-user').value, password: document.getElementById('correo-pass').value, notas: document.getElementById('correo-notas').value, etiquetas: "" };
-            } else if(entity === 'hikconnect') {
-                modalId = 'modal-hik';
-                data = { id: document.getElementById('hik-id').value, nombreCliente: document.getElementById('hik-cliente').value, usuarioHikconnect: document.getElementById('hik-userhik').value, passwordHikconnect: document.getElementById('hik-passhik').value, passwordCifrado: document.getElementById('hik-passcif').value, usuarioDvrLocal: document.getElementById('hik-userdvr').value, passwordDvrLocal: document.getElementById('hik-passdvr').value, whatsappCliente: document.getElementById('hik-whatsapp').value, etiquetas: document.getElementById('hik-etiquetas').value, notasInternas: document.getElementById('hik-notas').value };
-            } else if(entity === 'equipos') {
-                modalId = 'modal-equipo';
-                data = { id: document.getElementById('equipo-id').value, cliente: document.getElementById('equipo-cliente').value, modelo: document.getElementById('equipo-modelo').value, serial: document.getElementById('equipo-serial').value, ip: document.getElementById('equipo-ip').value, lugarInstalacion: document.getElementById('equipo-lugar').value, fecha: document.getElementById('equipo-fecha').value, notas: document.getElementById('equipo-notas').value };
-            }
-            const isEdit = !!data.id; if(!isEdit) delete data.id;
-            closeModal(modalId);
-            const res = await apiCall(isEdit ? 'update' : 'create', entity, data);
-            if(res?.success) { showToast("Guardado.", "success"); syncData(true); }
         }
 
         function prepareEdit(entity, id) {
@@ -657,30 +692,17 @@
             }
         }
 
-        async function deleteRecord(entity, id) {
-            if(confirm("¿Borrar este registro?")) {
-                const res = await apiCall('delete', entity, {id: id});
-                if(res?.success) { showToast("Eliminado", "success"); syncData(true); }
-            }
-        }
-
         function sendWhatsApp(id) {
             try {
                 const data = state.hikconnect.find(r => r.id === id);
                 if(!data) return showToast("Registro no encontrado", "error");
                 
                 let rawPhone = data.whatsappCliente;
-                if(!rawPhone || String(rawPhone).trim() === '') {
-                    return showToast("No hay WhatsApp registrado", "error");
-                }
+                if(!rawPhone || String(rawPhone).trim() === '') return showToast("No hay WhatsApp registrado", "error");
                 
-                // Conversión segura a Texto (por si Sheets lo manda como Number) y formateo para Perú
                 let phone = String(rawPhone).replace(/\D/g,'');
-                if (phone.length === 9) {
-                    phone = '51' + phone;
-                }
+                if (phone.length === 9) phone = '51' + phone;
                 
-                // Validación para evitar que campos nulos rompan el texto
                 const name = data.nombreCliente || 'Cliente';
                 const hikU = data.usuarioHikconnect || 'N/A';
                 const hikP = data.passwordHikconnect || 'N/A';
@@ -691,41 +713,17 @@
                 const msg = `Estimado(a) *${name}*, le saludamos cordialmente de *KGB SECURITY* 🛡️.\n\nNos comunicamos para informarle que hemos registrado y respaldado de forma segura las credenciales de sus equipos de videovigilancia.\n\nQueremos asegurarle que esta información será tratada con la más estricta confidencialidad y será utilizada *única y exclusivamente* para brindarle un soporte técnico rápido y eficiente cuando lo requiera.\n\nSus accesos registrados para soporte son:\n👤 *Usuario HIK:* ${hikU}\n🔑 *Pass HIK:* ${hikP}\n🔐 *Cifrado:* ${cifrado}\n👤 *Usuario DVR:* ${dvrU}\n🔑 *Pass DVR:* ${dvrP}\n\nPor su seguridad, le recomendamos no compartir estos datos con terceros no autorizados. ¡Quedamos a su entera disposición!`;
                 
                 const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`;
-                
-                // Bypass para navegadores que bloquean ventanas emergentes (Pop-ups)
                 let opened = window.open(url, '_blank');
-                if (!opened) {
-                    window.location.href = url; // Fallback: Abre en la misma pestaña si hay bloqueo estricto
-                }
+                if (!opened) window.location.href = url; 
             } catch(error) {
-                console.error("Error de WhatsApp:", error);
-                showToast("Error interno al abrir WhatsApp", "error");
+                showToast("Error al abrir WhatsApp", "error");
             }
         }
 
-        function openModal(id) {
-            document.getElementById(id).classList.add('active');
-            if(!document.getElementById(id).querySelector('input[type="hidden"]').value) document.getElementById(id).querySelector('form').reset();
-        }
-
-        function closeModal(id) {
-            document.getElementById(id).classList.remove('active'); document.getElementById(id).querySelector('form').reset();
-            document.getElementById(id).querySelector('input[type="hidden"]').value = '';
-        }
-
-        function copyToClipboard(text) {
-            if (!text || text === 'undefined') return showToast("Nada que copiar", "error");
-            const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
-            try { document.execCommand('copy'); showToast("Copiado 📋", "info"); } catch(err) { } document.body.removeChild(ta);
-        }
-
-        function showToast(message, type = 'info') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div'); toast.className = `toast ${type}`; toast.innerText = message;
-            container.appendChild(toast);
-            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => { if(container.contains(toast)) container.removeChild(toast) }, 300); }, 3000);
-        }
-
+        function openModal(id) { document.getElementById(id).classList.add('active'); if(!document.getElementById(id).querySelector('input[type="hidden"]').value) document.getElementById(id).querySelector('form').reset(); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); document.getElementById(id).querySelector('form').reset(); document.getElementById(id).querySelector('input[type="hidden"]').value = ''; }
+        function copyToClipboard(text) { if (!text || text === 'undefined') return showToast("Nada que copiar", "error"); const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast("Copiado 📋", "info"); } catch(err) { } document.body.removeChild(ta); }
+        function showToast(message, type = 'info') { const container = document.getElementById('toast-container'); const toast = document.createElement('div'); toast.className = `toast ${type}`; toast.innerText = message; container.appendChild(toast); setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => { if(container.contains(toast)) container.removeChild(toast) }, 300); }, 3000); }
         function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'"]/g, tag => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[tag] || tag)); }
         function escapeJS(str) { if(!str) return ''; return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"'); }
     </script>
