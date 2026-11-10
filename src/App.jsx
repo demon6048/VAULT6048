@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
 import { 
   ShieldCheck, Mail, Users, Cctv, Plus, Copy, Trash2, RefreshCw, Menu, X, 
   CheckCircle, Send, Key, Phone, Search, Link as LinkIcon, Calendar, Lock, 
-  Server, AtSign, Settings, Database, UploadCloud, AlertCircle, QrCode
+  Server, AtSign, Settings, Database, UploadCloud, AlertCircle, QrCode,
+  Edit3, Save, Sparkles, Clock, RotateCcw
 } from 'lucide-react';
 
 // URL permanente conectada a tu nuevo Google Sheets
@@ -10,6 +11,58 @@ const DEFAULT_SHEETS_URL = "https://script.google.com/macros/s/AKfycbwarMdnRESrC
 
 // Función segura para evitar que valores vacíos o numéricos de Google Sheets rompan la página
 const safeStr = (val) => (val !== null && val !== undefined ? String(val) : '');
+
+// Icono SVG nativo para Editar (evita errores de versión en librerías externas)
+const EditIcon = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+  </svg>
+);
+
+// Barra de Autocompletado Inteligente que cruza datos entre Correos, CCTV y Equipos IP
+const SmartAutocomplete = ({ profiles, queryValues, onSelect, accent = "blue" }) => {
+  const matches = useMemo(() => {
+    const terms = (queryValues || [])
+      .map(v => safeStr(v).trim().toLowerCase())
+      .filter(v => v.length >= 2);
+    if (terms.length === 0 || !Array.isArray(profiles)) return [];
+
+    return profiles.filter(p => {
+      const haystack = `${p.clientName} ${p.phone} ${p.email} ${p.appUser} ${p.ip}`.toLowerCase();
+      return terms.some(t => haystack.includes(t));
+    }).slice(0, 4);
+  }, [profiles, queryValues]);
+
+  if (matches.length === 0) return null;
+
+  return (
+    <div className="mb-5 p-3.5 bg-slate-950/90 border border-blue-500/30 rounded-xl shadow-lg">
+      <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+        <Users size={13} /> Autocompletado Inteligente (Clientes detectados en tu bóveda - Clic para rellenar)
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {matches.map((m, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => onSelect(m)}
+            className="px-3 py-2 bg-slate-900 hover:bg-blue-600/20 border border-slate-700 hover:border-blue-500 rounded-lg text-left transition-all flex items-center gap-2.5 group"
+          >
+            <div className="flex flex-col">
+              <span className="text-xs font-black text-white group-hover:text-blue-300">
+                {m.clientName || m.email || 'Cliente Registrado'}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {[m.phone && `Tel: ${m.phone}`, m.email && `Correo: ${m.email}`, m.ip && `IP: ${m.ip}`].filter(Boolean).join(' • ')}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const DataRow = memo(({ value, icon: IconCmp, onCopy, label, color = "blue" }) => {
   const displayVal = safeStr(value);
@@ -41,9 +94,45 @@ const DataRow = memo(({ value, icon: IconCmp, onCopy, label, color = "blue" }) =
 // ============================================================================
 // MÓDULO 1: BANCO DE CORREOS (GMAIL, HOTMAIL, ETC.)
 // ============================================================================
-const EmailsModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
-  const [form, setForm] = useState({ platform: 'Gmail', email: '', password: '', tags: '' });
+const EmailsModule = ({ data, allProfiles, onSave, onUpdate, onDelete, onCopy, showToast }) => {
+  const [form, setForm] = useState(() => {
+    try {
+      const savedDraft = localStorage.getItem('kgb_draft_emails');
+      return savedDraft ? JSON.parse(savedDraft) : { platform: 'Gmail', email: '', password: '', tags: '' };
+    } catch {
+      return { platform: 'Gmail', email: '', password: '', tags: '' };
+    }
+  });
+  const [editingItem, setEditingItem] = useState(null);
+  const [lastAutoSavedStr, setLastAutoSavedStr] = useState('');
   const [search, setSearch] = useState('');
+
+  // Guardar borrador automáticamente mientras escribe
+  useEffect(() => {
+    try { localStorage.setItem('kgb_draft_emails', JSON.stringify(form)); } catch {}
+  }, [form]);
+
+  // Autoguardado cada 1 minuto (60,000 ms) si hay correo y clave escritos
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const emailTrim = safeStr(form.email).trim();
+      const passTrim = safeStr(form.password).trim();
+      if (!emailTrim || !passTrim) return;
+
+      const snapshot = JSON.stringify(form);
+      if (snapshot === lastAutoSavedStr) return;
+
+      const rowValues = [form.platform || 'Gmail', emailTrim, passTrim, safeStr(form.tags).trim()];
+      if (editingItem) {
+        onUpdate('personal', editingItem.id, 'Correos', editingItem.email, rowValues, form, true);
+      } else {
+        const created = onSave('personal', 'Correos', rowValues, form, true);
+        if (created) setEditingItem(created);
+      }
+      setLastAutoSavedStr(snapshot);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [form, editingItem, lastAutoSavedStr, onSave, onUpdate]);
   
   const filteredData = useMemo(() => {
     const q = safeStr(search).toLowerCase();
@@ -54,30 +143,71 @@ const EmailsModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
     );
   }, [data, search]);
 
+  const resetForm = () => {
+    const empty = { platform: 'Gmail', email: '', password: '', tags: '' };
+    setForm(empty);
+    setEditingItem(null);
+    setLastAutoSavedStr('');
+    try { localStorage.removeItem('kgb_draft_emails'); } catch {}
+  };
+
   const handleSubmit = () => {
-    if (!form.email.trim() || !form.password.trim()) {
+    if (!safeStr(form.email).trim() || !safeStr(form.password).trim()) {
       return showToast("Correo y contraseña son obligatorios");
     }
-    // Orden de columnas en Hoja 'Correos': [Plataforma, Correo, Contraseña, Asignado A]
-    onSave(
-      'personal', 
-      'Correos', 
-      [form.platform, form.email.trim(), form.password.trim(), form.tags.trim()], 
-      form
-    );
-    setForm({ platform: 'Gmail', email: '', password: '', tags: '' });
+    const rowValues = [form.platform, safeStr(form.email).trim(), safeStr(form.password).trim(), safeStr(form.tags).trim()];
+    if (editingItem) {
+      onUpdate('personal', editingItem.id, 'Correos', editingItem.email, rowValues, form, false);
+    } else {
+      onSave('personal', 'Correos', rowValues, form, false);
+    }
+    resetForm();
+  };
+
+  const startEdit = (item) => {
+    const loaded = {
+      platform: safeStr(item.platform) || 'Gmail',
+      email: safeStr(item.email),
+      password: safeStr(item.password),
+      tags: safeStr(item.tags)
+    };
+    setEditingItem(item);
+    setForm(loaded);
+    setLastAutoSavedStr(JSON.stringify(loaded));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast("Modo edición activado");
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-2xl shadow-xl">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20"><Mail size={24} /></div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white italic uppercase tracking-tight">Banco de Correos</h2>
-            <p className="text-xs text-slate-400 font-medium">Guarda cuentas de Gmail, Hotmail y otros para entregar a tus clientes.</p>
+      <div className={`bg-slate-900 border ${editingItem ? 'border-amber-500/70' : 'border-slate-800'} p-6 sm:p-8 rounded-2xl shadow-xl transition-all`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20"><Mail size={24} /></div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-white italic uppercase tracking-tight">
+                {editingItem ? 'Editando Correo Registrado' : 'Banco de Correos'}
+              </h2>
+              <p className="text-xs text-slate-400 font-medium">Guarda cuentas de Gmail, Hotmail y otros • Autoguardado activo cada 1 min.</p>
+            </div>
           </div>
+          {editingItem && (
+            <button type="button" onClick={resetForm} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border border-amber-500/30">
+              <X size={14} /> Cancelar Edición
+            </button>
+          )}
         </div>
+
+        <SmartAutocomplete 
+          profiles={allProfiles} 
+          queryValues={[form.tags, form.email]} 
+          onSelect={(p) => setForm(prev => ({
+            ...prev,
+            email: prev.email || p.email || p.appUser || '',
+            password: prev.password || p.emailPass || p.appPass || '',
+            tags: p.clientName ? `${p.clientName}${p.phone ? ' - ' + p.phone : ''}` : prev.tags
+          }))} 
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 bg-slate-950/60 p-5 sm:p-6 rounded-xl border border-slate-800/70">
           <div className="space-y-2">
@@ -98,12 +228,12 @@ const EmailsModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
             <input className="w-full px-4 py-3 bg-slate-900 border border-slate-800 text-white rounded-xl text-sm font-bold outline-none focus:border-blue-500 transition-all" value={form.password} onChange={e=>setForm({...form, password: e.target.value})} placeholder="Clave del correo" />
           </div>
           <div className="space-y-2 md:col-span-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cliente Asignado / Nota (Opcional)</label>
-            <input className="w-full px-4 py-3 bg-slate-900 border border-slate-800 text-white rounded-xl text-sm font-bold outline-none focus:border-blue-500 transition-all" value={form.tags} onChange={e=>setForm({...form, tags: e.target.value})} placeholder="Ej. Entregado a Sr. Carlos / Libre para venta" />
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cliente Asignado / Teléfono / Nota (Opcional)</label>
+            <input className="w-full px-4 py-3 bg-slate-900 border border-slate-800 text-white rounded-xl text-sm font-bold outline-none focus:border-blue-500 transition-all" value={form.tags} onChange={e=>setForm({...form, tags: e.target.value})} placeholder="Escribe nombre o teléfono para autocompletar..." />
           </div>
           <div className="flex items-end">
-            <button type="button" onClick={handleSubmit} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black uppercase tracking-wider text-xs transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
-              <Plus size={18}/> Guardar Correo
+            <button type="button" onClick={handleSubmit} className={`w-full py-3 ${editingItem ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'} text-white rounded-xl font-black uppercase tracking-wider text-xs transition-all shadow-lg flex items-center justify-center gap-2`}>
+              <Plus size={18}/> {editingItem ? 'Actualizar Correo' : 'Guardar Correo'}
             </button>
           </div>
         </div>
@@ -122,9 +252,14 @@ const EmailsModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400"><Mail size={16}/></div>
                 <span className="text-xs font-black text-white uppercase tracking-wider">{safeStr(item.platform) || 'Gmail'}</span>
               </div>
-              <button type="button" onClick={() => onDelete('personal', item.id, 'Correos', item.email)} className="text-slate-500 hover:text-rose-500 bg-slate-900 hover:bg-rose-500/10 p-2 rounded-lg transition-all border border-slate-800" title="Eliminar correo">
-                <Trash2 size={15} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => startEdit(item)} className="text-amber-400 hover:text-white bg-slate-900 hover:bg-amber-600 px-2.5 py-1.5 rounded-lg transition-all border border-slate-800 flex items-center gap-1 text-[10px] font-black uppercase" title="Editar correo">
+                  <EditIcon size={13} /> Editar
+                </button>
+                <button type="button" onClick={() => onDelete('personal', item.id, 'Correos', item.email)} className="text-slate-500 hover:text-rose-500 bg-slate-900 hover:bg-rose-500/10 p-2 rounded-lg transition-all border border-slate-800" title="Eliminar correo">
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
             
             <div className="p-5 flex-1 flex flex-col">
@@ -155,9 +290,53 @@ const EmailsModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
 // ============================================================================
 // MÓDULO 2: CLIENTES CCTV (DVR, HIK-CONNECT, HILOOK, CIFRADO)
 // ============================================================================
-const CCTVModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
-  const [form, setForm] = useState({ clientName: '', appUser: '', appPass: '', encryptCode: '', dvrUser: 'admin', dvrPass: '', phone: '' });
+const CCTVModule = ({ data, allProfiles, onSave, onUpdate, onDelete, onCopy, showToast }) => {
+  const [form, setForm] = useState(() => {
+    try {
+      const savedDraft = localStorage.getItem('kgb_draft_cctv');
+      return savedDraft ? JSON.parse(savedDraft) : { clientName: '', appUser: '', appPass: '', encryptCode: '', dvrUser: 'admin', dvrPass: '', phone: '' };
+    } catch {
+      return { clientName: '', appUser: '', appPass: '', encryptCode: '', dvrUser: 'admin', dvrPass: '', phone: '' };
+    }
+  });
+  const [editingItem, setEditingItem] = useState(null);
+  const [lastAutoSavedStr, setLastAutoSavedStr] = useState('');
   const [search, setSearch] = useState('');
+
+  // Guardar borrador local mientras se llena el formulario
+  useEffect(() => {
+    try { localStorage.setItem('kgb_draft_cctv', JSON.stringify(form)); } catch {}
+  }, [form]);
+
+  // Autoguardado cada 1 minuto (60,000 ms)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nameTrim = safeStr(form.clientName).trim();
+      if (!nameTrim) return;
+
+      const snapshot = JSON.stringify(form);
+      if (snapshot === lastAutoSavedStr) return;
+
+      const rowValues = [
+        nameTrim,
+        safeStr(form.appUser).trim(),
+        safeStr(form.appPass).trim(),
+        safeStr(form.encryptCode).trim(),
+        safeStr(form.dvrUser).trim() || 'admin',
+        safeStr(form.dvrPass).trim(),
+        safeStr(form.phone).trim()
+      ];
+
+      if (editingItem) {
+        onUpdate('clients', editingItem.id, 'CCTV', editingItem.clientName, rowValues, form, true);
+      } else {
+        const created = onSave('clients', 'CCTV', rowValues, form, true);
+        if (created) setEditingItem(created);
+      }
+      setLastAutoSavedStr(snapshot);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [form, editingItem, lastAutoSavedStr, onSave, onUpdate]);
 
   const filteredData = useMemo(() => {
     const q = safeStr(search).toLowerCase();
@@ -173,45 +352,111 @@ const CCTVModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
     return clean.length === 9 ? `51${clean}` : clean;
   };
 
+  // Mensaje de WhatsApp amigable, cuidadoso y con pautas de seguridad
   const sendWhatsApp = (item) => {
     const phone = formatPhone(item.phone);
     if (!phone) { showToast("Este cliente no tiene número de WhatsApp"); return; }
-    const msg = `*Estimado/a ${safeStr(item.clientName)},*\n\nReciba un cordial saludo de *KGB Technology*.\nSu sistema de cámaras de seguridad ha sido configurado. Aquí tiene sus credenciales de acceso:\n\n🔹 *APP HIK-CONNECT / HILOOK*\n👤 *Usuario:* ${safeStr(item.appUser)}\n🔑 *Clave App:* ${safeStr(item.appPass)}\n🔐 *Código de Verificación / Cifrado:* ${safeStr(item.encryptCode)}\n\n🔹 *ACCESO LOCAL (DVR / NVR)*\n👤 *Usuario:* ${safeStr(item.dvrUser) || 'admin'}\n🔑 *Clave DVR:* ${safeStr(item.dvrPass)}\n\n⚠️ *NOTA:* Conservamos una copia de respaldo en nuestra bóveda técnica exclusivamente para soporte y garantía.\n\n*Atentamente, KGB Technology*`;
+    const msg = 
+      `¡Hola, estimado/a *${safeStr(item.clientName)}*! 👋\n\n` +
+      `Reciba un cordial y afectuoso saludo de parte del equipo de *KGB Technology*.\n\n` +
+      `✅ Le escribimos para confirmarle que la instalación y configuración de su *sistema de cámaras de seguridad* ya quedó lista y funcionando en óptimas condiciones. A continuación, le hacemos entrega de sus credenciales personales de acceso:\n\n` +
+      `📱 *APLICACIÓN MÓVIL (HIK-CONNECT / HILOOK)*\n` +
+      `👤 *Usuario:* ${safeStr(item.appUser) || '---'}\n` +
+      `🔑 *Contraseña App:* ${safeStr(item.appPass) || '---'}\n` +
+      `🔐 *Código de Cifrado / Verificación:* ${safeStr(item.encryptCode) || '---'}\n\n` +
+      `🖥️ *EQUIPO GRABADOR LOCAL (DVR / NVR)*\n` +
+      `👤 *Usuario:* ${safeStr(item.dvrUser) || 'admin'}\n` +
+      `🔑 *Contraseña DVR:* ${safeStr(item.dvrPass) || '---'}\n\n` +
+      `🛡️ *PAUTAS IMPORTANTES PARA SU SEGURIDAD:*\n` +
+      `1️⃣ *No comparta sus claves:* Estas credenciales son estrictamente personales; evite reenviarlas a terceros por su propia seguridad.\n` +
+      `2️⃣ *Cuide su Código de Cifrado:* Es la llave que protege el video en vivo de sus cámaras.\n` +
+      `3️⃣ *Dispositivos seguros:* Inicie sesión únicamente en celulares o computadoras de su entera confianza.\n` +
+      `4️⃣ *Respaldo de Garantía:* En *KGB Technology* resguardamos una copia segura de estos datos exclusivamente para asistirle rápido ante cualquier soporte técnico o garantía.\n\n` +
+      `Muchas gracias por su confianza. ¡Estamos a su disposición ante cualquier consulta!\n\n` +
+      `Atentamente,\n*Equipo Técnico - KGB Technology*`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
+  const resetForm = () => {
+    const empty = { clientName: '', appUser: '', appPass: '', encryptCode: '', dvrUser: 'admin', dvrPass: '', phone: '' };
+    setForm(empty);
+    setEditingItem(null);
+    setLastAutoSavedStr('');
+    try { localStorage.removeItem('kgb_draft_cctv'); } catch {}
+  };
+
   const handleSubmit = () => {
-    if (!form.clientName.trim()) {
+    if (!safeStr(form.clientName).trim()) {
       return showToast("El nombre del cliente es obligatorio");
     }
-    // Orden en Hoja 'CCTV': [Cliente, UsuarioApp, ClaveApp, CodigoCifrado, UsuarioDVR, ClaveDVR, WhatsApp]
-    onSave(
-      'clients', 
-      'CCTV', 
-      [
-        form.clientName.trim(), 
-        form.appUser.trim(), 
-        form.appPass.trim(), 
-        form.encryptCode.trim(), 
-        form.dvrUser.trim() || 'admin', 
-        form.dvrPass.trim(), 
-        form.phone.trim()
-      ], 
-      form
-    );
-    setForm({ clientName: '', appUser: '', appPass: '', encryptCode: '', dvrUser: 'admin', dvrPass: '', phone: '' });
+    const rowValues = [
+      safeStr(form.clientName).trim(), 
+      safeStr(form.appUser).trim(), 
+      safeStr(form.appPass).trim(), 
+      safeStr(form.encryptCode).trim(), 
+      safeStr(form.dvrUser).trim() || 'admin', 
+      safeStr(form.dvrPass).trim(), 
+      safeStr(form.phone).trim()
+    ];
+    if (editingItem) {
+      onUpdate('clients', editingItem.id, 'CCTV', editingItem.clientName, rowValues, form, false);
+    } else {
+      onSave('clients', 'CCTV', rowValues, form, false);
+    }
+    resetForm();
+  };
+
+  const startEdit = (item) => {
+    const loaded = {
+      clientName: safeStr(item.clientName),
+      appUser: safeStr(item.appUser),
+      appPass: safeStr(item.appPass),
+      encryptCode: safeStr(item.encryptCode),
+      dvrUser: safeStr(item.dvrUser) || 'admin',
+      dvrPass: safeStr(item.dvrPass),
+      phone: safeStr(item.phone)
+    };
+    setEditingItem(item);
+    setForm(loaded);
+    setLastAutoSavedStr(JSON.stringify(loaded));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast("Editando cliente CCTV");
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-2xl shadow-xl">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20"><ShieldCheck size={24} /></div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white italic uppercase tracking-tight">Credenciales CCTV & DVR</h2>
-            <p className="text-xs text-slate-400 font-medium">Guarda claves de Hik-Connect, HiLook, DVR y envíalas por WhatsApp en 1 clic.</p>
+      <div className={`bg-slate-900 border ${editingItem ? 'border-amber-500/70' : 'border-slate-800'} p-6 sm:p-8 rounded-2xl shadow-xl transition-all`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20"><ShieldCheck size={24} /></div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-white italic uppercase tracking-tight">
+                {editingItem ? 'Editando Cliente CCTV' : 'Credenciales CCTV & DVR'}
+              </h2>
+              <p className="text-xs text-slate-400 font-medium">Guarda o edita claves de Hik-Connect, HiLook y DVR • Autoguardado cada 1 min.</p>
+            </div>
           </div>
+          {editingItem && (
+            <button type="button" onClick={resetForm} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border border-amber-500/30">
+              <X size={14} /> Cancelar Edición
+            </button>
+          )}
         </div>
+
+        <SmartAutocomplete 
+          profiles={allProfiles} 
+          queryValues={[form.clientName, form.phone, form.appUser]} 
+          onSelect={(p) => setForm(prev => ({
+            ...prev,
+            clientName: p.clientName || prev.clientName,
+            phone: p.phone || prev.phone,
+            appUser: p.appUser || p.email || prev.appUser,
+            appPass: p.appPass || p.emailPass || prev.appPass,
+            encryptCode: p.encryptCode || prev.encryptCode,
+            dvrUser: p.dvrUser || prev.dvrUser || 'admin',
+            dvrPass: p.dvrPass || prev.dvrPass
+          }))} 
+        />
         
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 bg-slate-950/60 p-5 sm:p-6 rounded-xl border border-slate-800/70">
           <div className="xl:col-span-2 space-y-5">
@@ -259,8 +504,8 @@ const CCTVModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><Phone size={12}/> WhatsApp del Cliente</label>
                 <input className="w-full px-4 py-3 bg-slate-900 border border-slate-800 text-white rounded-xl text-sm font-bold outline-none focus:border-emerald-500" value={form.phone} onChange={e=>setForm({...form, phone: e.target.value})} placeholder="987654321" />
               </div>
-              <button type="button" onClick={handleSubmit} className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black uppercase tracking-wider text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
-                <Plus size={18}/> Registrar Cliente CCTV
+              <button type="button" onClick={handleSubmit} className={`w-full py-3.5 ${editingItem ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl font-black uppercase tracking-wider text-xs transition-all shadow-lg flex items-center justify-center gap-2`}>
+                <Plus size={18}/> {editingItem ? 'Guardar Cambios del Cliente' : 'Registrar Cliente CCTV'}
               </button>
             </div>
           </div>
@@ -282,12 +527,15 @@ const CCTVModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
                   <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mt-1"><Phone size={13}/> {safeStr(item.phone)}</span>
                 )}
               </div>
-              <div className="flex items-center gap-2.5 shrink-0">
-                <button type="button" onClick={() => sendWhatsApp(item)} className="px-4 py-2.5 bg-[#25D366] hover:bg-[#128c7e] text-white rounded-xl transition-all shadow-lg flex items-center gap-2 text-xs font-black uppercase tracking-wider">
-                  <Send size={15}/> Enviar Claves
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button type="button" onClick={() => sendWhatsApp(item)} className="px-3.5 py-2 bg-[#25D366] hover:bg-[#128c7e] text-white rounded-xl transition-all shadow-lg flex items-center gap-1.5 text-xs font-black uppercase tracking-wider">
+                  <Send size={14}/> Enviar Claves
                 </button>
-                <button type="button" onClick={() => onDelete('clients', item.id, 'CCTV', item.clientName)} className="p-2.5 text-slate-500 hover:text-rose-500 bg-slate-950 hover:bg-rose-500/10 rounded-xl transition-all border border-slate-800">
-                  <Trash2 size={17} />
+                <button type="button" onClick={() => startEdit(item)} className="px-3 py-2 text-amber-400 hover:text-white bg-slate-950 hover:bg-amber-600 rounded-xl transition-all border border-slate-800 flex items-center gap-1 text-xs font-black uppercase">
+                  <EditIcon size={14} /> Editar
+                </button>
+                <button type="button" onClick={() => onDelete('clients', item.id, 'CCTV', item.clientName)} className="p-2 text-slate-500 hover:text-rose-500 bg-slate-950 hover:bg-rose-500/10 rounded-xl transition-all border border-slate-800">
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>
@@ -320,19 +568,55 @@ const CCTVModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
 // ============================================================================
 // MÓDULO 3: EQUIPOS IP Y GARANTÍAS (CÁMARAS IP, CLAVES, QR, SERIE, IP)
 // ============================================================================
-const IPEquipModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
-  const [form, setForm] = useState({ 
-    client: '', 
-    model: '', 
-    ip: '', 
-    camUser: 'admin', 
-    camPass: '', 
-    serial: '', 
-    qrCode: '', 
-    link: '', 
-    date: '' 
+const IPEquipModule = ({ data, allProfiles, onSave, onUpdate, onDelete, onCopy, showToast }) => {
+  const [form, setForm] = useState(() => {
+    try {
+      const savedDraft = localStorage.getItem('kgb_draft_ip');
+      return savedDraft ? JSON.parse(savedDraft) : { client: '', model: '', ip: '', camUser: 'admin', camPass: '', serial: '', qrCode: '', link: '', date: '' };
+    } catch {
+      return { client: '', model: '', ip: '', camUser: 'admin', camPass: '', serial: '', qrCode: '', link: '', date: '' };
+    }
   });
+  const [editingItem, setEditingItem] = useState(null);
+  const [lastAutoSavedStr, setLastAutoSavedStr] = useState('');
   const [search, setSearch] = useState('');
+
+  // Guardar borrador local mientras se llena el formulario
+  useEffect(() => {
+    try { localStorage.setItem('kgb_draft_ip', JSON.stringify(form)); } catch {}
+  }, [form]);
+
+  // Autoguardado cada 1 minuto (60,000 ms)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const clientTrim = safeStr(form.client).trim();
+      if (!clientTrim) return;
+
+      const snapshot = JSON.stringify(form);
+      if (snapshot === lastAutoSavedStr) return;
+
+      const rowValues = [
+        clientTrim,
+        safeStr(form.model).trim(),
+        safeStr(form.ip).trim(),
+        safeStr(form.camUser).trim() || 'admin',
+        safeStr(form.camPass).trim(),
+        safeStr(form.serial).trim(),
+        safeStr(form.qrCode).trim(),
+        safeStr(form.link).trim(),
+        safeStr(form.date)
+      ];
+
+      if (editingItem) {
+        onUpdate('cameras', editingItem.id, 'EquiposIP', editingItem.client || editingItem.clientName, rowValues, form, true);
+      } else {
+        const created = onSave('cameras', 'EquiposIP', rowValues, form, true);
+        if (created) setEditingItem(created);
+      }
+      setLastAutoSavedStr(snapshot);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [form, editingItem, lastAutoSavedStr, onSave, onUpdate]);
 
   // Filtro 100% blindado contra errores de propiedades undefined
   const filteredData = useMemo(() => {
@@ -346,40 +630,88 @@ const IPEquipModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
     });
   }, [data, search]);
 
+  const resetForm = () => {
+    const empty = { client: '', model: '', ip: '', camUser: 'admin', camPass: '', serial: '', qrCode: '', link: '', date: '' };
+    setForm(empty);
+    setEditingItem(null);
+    setLastAutoSavedStr('');
+    try { localStorage.removeItem('kgb_draft_ip'); } catch {}
+  };
+
   const handleSubmit = () => {
-    if (!form.client.trim()) {
+    if (!safeStr(form.client).trim()) {
       return showToast("El cliente o ubicación de la cámara es obligatorio");
     }
-    // Orden en Hoja 'EquiposIP': [Cliente/Ubicación, Modelo, IP, UsuarioCam, ClaveCam, Serie, CodigoQR, Link, FechaInstalacion]
-    onSave(
-      'cameras', 
-      'EquiposIP', 
-      [
-        form.client.trim(),
-        form.model.trim(),
-        form.ip.trim(),
-        form.camUser.trim() || 'admin',
-        form.camPass.trim(),
-        form.serial.trim(),
-        form.qrCode.trim(),
-        form.link.trim(),
-        form.date
-      ], 
-      form
-    );
-    setForm({ client: '', model: '', ip: '', camUser: 'admin', camPass: '', serial: '', qrCode: '', link: '', date: '' });
+    const rowValues = [
+      safeStr(form.client).trim(),
+      safeStr(form.model).trim(),
+      safeStr(form.ip).trim(),
+      safeStr(form.camUser).trim() || 'admin',
+      safeStr(form.camPass).trim(),
+      safeStr(form.serial).trim(),
+      safeStr(form.qrCode).trim(),
+      safeStr(form.link).trim(),
+      safeStr(form.date)
+    ];
+    if (editingItem) {
+      onUpdate('cameras', editingItem.id, 'EquiposIP', editingItem.client || editingItem.clientName, rowValues, form, false);
+    } else {
+      onSave('cameras', 'EquiposIP', rowValues, form, false);
+    }
+    resetForm();
+  };
+
+  const startEdit = (item) => {
+    const loaded = {
+      client: safeStr(item.client || item.clientName),
+      model: safeStr(item.model),
+      ip: safeStr(item.ip),
+      camUser: safeStr(item.camUser) || 'admin',
+      camPass: safeStr(item.camPass),
+      serial: safeStr(item.serial),
+      qrCode: safeStr(item.qrCode),
+      link: safeStr(item.link),
+      date: safeStr(item.date)
+    };
+    setEditingItem(item);
+    setForm(loaded);
+    setLastAutoSavedStr(JSON.stringify(loaded));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast("Editando cámara IP");
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-2xl shadow-xl">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20"><Cctv size={24} /></div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white italic uppercase tracking-tight">Cámaras IP, Claves y Garantías</h2>
-            <p className="text-xs text-slate-400 font-medium">Registra la IP, usuario/clave de la cámara, código QR/serie y fecha para garantías.</p>
+      <div className={`bg-slate-900 border ${editingItem ? 'border-amber-500/70' : 'border-slate-800'} p-6 sm:p-8 rounded-2xl shadow-xl transition-all`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20"><Cctv size={24} /></div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-white italic uppercase tracking-tight">
+                {editingItem ? 'Editando Cámara IP' : 'Cámaras IP, Claves y Garantías'}
+              </h2>
+              <p className="text-xs text-slate-400 font-medium">Registra o edita la IP, usuario/clave, QR/serie y fecha • Autoguardado cada 1 min.</p>
+            </div>
           </div>
+          {editingItem && (
+            <button type="button" onClick={resetForm} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border border-amber-500/30">
+              <X size={14} /> Cancelar Edición
+            </button>
+          )}
         </div>
+
+        <SmartAutocomplete 
+          profiles={allProfiles} 
+          queryValues={[form.client, form.ip]} 
+          onSelect={(p) => setForm(prev => ({
+            ...prev,
+            client: p.clientName || prev.client,
+            camUser: p.dvrUser || prev.camUser || 'admin',
+            camPass: p.dvrPass || p.appPass || prev.camPass,
+            qrCode: p.encryptCode || prev.qrCode,
+            ip: p.ip || prev.ip
+          }))} 
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 bg-slate-950/60 p-5 sm:p-6 rounded-xl border border-slate-800/70">
           <div className="space-y-2 md:col-span-2">
@@ -423,8 +755,8 @@ const IPEquipModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
           </div>
           
           <div className="flex items-end">
-            <button type="button" onClick={handleSubmit} className="w-full py-3.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-black uppercase tracking-wider text-xs transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2">
-              <Plus size={18}/> Guardar Cámara IP
+            <button type="button" onClick={handleSubmit} className={`w-full py-3.5 ${editingItem ? 'bg-amber-600 hover:bg-amber-500' : 'bg-orange-600 hover:bg-orange-500'} text-white rounded-xl font-black uppercase tracking-wider text-xs transition-all shadow-lg flex items-center justify-center gap-2`}>
+              <Plus size={18}/> {editingItem ? 'Actualizar Cámara IP' : 'Guardar Cámara IP'}
             </button>
           </div>
         </div>
@@ -448,9 +780,14 @@ const IPEquipModule = ({ data, onSave, onDelete, onCopy, showToast }) => {
                     <span className="text-[11px] text-orange-400 font-bold uppercase tracking-widest block mt-0.5">{safeStr(item.model) || 'Cámara IP'}</span>
                   </div>
                 </div>
-                <button type="button" onClick={() => onDelete('cameras', item.id, 'EquiposIP', clientDisplay)} className="p-2 text-slate-500 hover:text-rose-500 bg-slate-950 hover:bg-rose-500/10 rounded-xl transition-all border border-slate-800 shrink-0">
-                  <Trash2 size={16} />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button type="button" onClick={() => startEdit(item)} className="px-2.5 py-1.5 text-amber-400 hover:text-white bg-slate-950 hover:bg-amber-600 rounded-xl transition-all border border-slate-800 flex items-center gap-1 text-[10px] font-black uppercase">
+                    <EditIcon size={13} /> Editar
+                  </button>
+                  <button type="button" onClick={() => onDelete('cameras', item.id, 'EquiposIP', clientDisplay)} className="p-2 text-slate-500 hover:text-rose-500 bg-slate-950 hover:bg-rose-500/10 rounded-xl transition-all border border-slate-800">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
               
               <div className="flex-1 flex flex-col bg-slate-950/50 p-4 rounded-xl border border-slate-800/60">
@@ -505,6 +842,7 @@ export default function App() {
   const [notification, setNotification] = useState(null);
   const [cloudStatus, setCloudStatus] = useState('checking'); 
   const [isLoading, setIsLoading] = useState(false);
+  const [lastAutoSave, setLastAutoSave] = useState('Activo');
 
   // URL de Google Sheets editable desde la interfaz
   const [sheetsUrl, setSheetsUrl] = useState(() => {
@@ -528,6 +866,69 @@ export default function App() {
       return { personal: [], clients: [], cameras: [] }; 
     }
   });
+
+  // Directorio unificado inteligente para autocompletar en todos los módulos
+  const clientDirectory = useMemo(() => {
+    const map = new Map();
+
+    const upsertProfile = (key, fields) => {
+      const cleanKey = safeStr(key).trim().toLowerCase();
+      if (!cleanKey) return;
+      const existing = map.get(cleanKey) || {};
+      map.set(cleanKey, {
+        name: fields.name || existing.name || '',
+        phone: fields.phone || existing.phone || '',
+        email: fields.email || existing.email || '',
+        password: fields.password || existing.password || '',
+        appUser: fields.appUser || existing.appUser || '',
+        appPass: fields.appPass || existing.appPass || '',
+        encryptCode: fields.encryptCode || existing.encryptCode || '',
+        dvrUser: fields.dvrUser || existing.dvrUser || '',
+        dvrPass: fields.dvrPass || existing.dvrPass || '',
+        ip: fields.ip || existing.ip || '',
+        model: fields.model || existing.model || ''
+      });
+    };
+
+    (data.personal || []).forEach(item => {
+      const tagName = safeStr(item.tags).trim();
+      const email = safeStr(item.email).trim();
+      upsertProfile(tagName || email, {
+        name: tagName,
+        email: email,
+        password: safeStr(item.password)
+      });
+    });
+
+    (data.clients || []).forEach(item => {
+      const name = safeStr(item.clientName).trim();
+      const appUser = safeStr(item.appUser).trim();
+      upsertProfile(name || item.phone || appUser, {
+        name,
+        phone: safeStr(item.phone),
+        email: appUser.includes('@') ? appUser : '',
+        appUser,
+        appPass: safeStr(item.appPass),
+        password: safeStr(item.appPass),
+        encryptCode: safeStr(item.encryptCode),
+        dvrUser: safeStr(item.dvrUser),
+        dvrPass: safeStr(item.dvrPass)
+      });
+    });
+
+    (data.cameras || []).forEach(item => {
+      const name = safeStr(item.client || item.clientName).trim();
+      upsertProfile(name || item.ip, {
+        name,
+        ip: safeStr(item.ip),
+        model: safeStr(item.model),
+        dvrUser: safeStr(item.camUser),
+        dvrPass: safeStr(item.camPass)
+      });
+    });
+
+    return Array.from(map.values());
+  }, [data]);
 
   const [syncQueue, setSyncQueue] = useState(() => {
     try { return JSON.parse(localStorage.getItem('kgb_v12_queue')) || []; } catch { return []; }
@@ -627,7 +1028,7 @@ export default function App() {
     showMsg("Copiado al portapapeles");
   }, [showMsg]);
 
-  const handleSave = useCallback((type, sheetName, valuesForSheet, formData) => {
+  const handleSave = useCallback((type, sheetName, valuesForSheet, formData, isAutoSave = false) => {
     const newId = "kgb_" + Date.now();
     const fechaActual = new Date().toLocaleString();
     const newItem = { id: newId, ...formData, createdAt: fechaActual };
@@ -638,7 +1039,28 @@ export default function App() {
       sheet: sheetName, 
       values: [newId, fechaActual, ...valuesForSheet] 
     }]);
-    showMsg("Guardado en Bóveda y Google Sheets");
+    showMsg(isAutoSave ? "Autoguardado automático (1 min)" : "Guardado en Bóveda y Google Sheets");
+    return newItem;
+  }, [showMsg]);
+
+  // Actualizar registro existente (tanto en memoria local como en Google Sheets)
+  const handleUpdate = useCallback((type, id, sheetName, oldKeyValue, valuesForSheet, formData, isAutoSave = false) => {
+    const fechaActual = new Date().toLocaleString();
+    const updatedItem = { id, ...formData, createdAt: fechaActual };
+
+    setData(prev => ({
+      ...prev,
+      [type]: (prev[type] || []).map(item => item.id === id ? updatedItem : item)
+    }));
+
+    // Para máxima compatibilidad con tu Google Sheets actual: reemplaza la fila anterior y añade la actualizada
+    setSyncQueue(prev => [
+      ...prev,
+      { action: 'delete', sheet: sheetName, id: id, value: oldKeyValue },
+      { action: 'add', sheet: sheetName, values: [id, fechaActual, ...valuesForSheet] }
+    ]);
+
+    showMsg(isAutoSave ? "Cambios autoguardados (1 min)" : "Registro actualizado correctamente");
   }, [showMsg]);
 
   const handleDelete = useCallback((type, id, sheetName, keyValue) => {
@@ -646,6 +1068,57 @@ export default function App() {
     setSyncQueue(prev => [...prev, { action: 'delete', sheet: sheetName, id: id, value: keyValue }]);
     showMsg("Registro eliminado");
   }, [showMsg]);
+
+  // Índice unificado de todos los clientes/correos/equipos para el Autocompletado Inteligente
+  const allProfiles = useMemo(() => {
+    const map = new Map();
+
+    (data.clients || []).forEach(c => {
+      const key = safeStr(c.clientName || c.phone || c.id).toLowerCase();
+      if (!key) return;
+      map.set(key, {
+        clientName: safeStr(c.clientName),
+        phone: safeStr(c.phone),
+        appUser: safeStr(c.appUser),
+        appPass: safeStr(c.appPass),
+        encryptCode: safeStr(c.encryptCode),
+        dvrUser: safeStr(c.dvrUser) || 'admin',
+        dvrPass: safeStr(c.dvrPass),
+        email: safeStr(c.appUser).includes('@') ? safeStr(c.appUser) : '',
+        emailPass: '',
+        ip: ''
+      });
+    });
+
+    (data.personal || []).forEach(p => {
+      const tagKey = safeStr(p.tags || p.email || p.id).toLowerCase();
+      if (!tagKey) return;
+      const existing = map.get(tagKey) || {};
+      map.set(tagKey, {
+        ...existing,
+        clientName: existing.clientName || safeStr(p.tags),
+        email: safeStr(p.email),
+        emailPass: safeStr(p.password),
+        appUser: existing.appUser || safeStr(p.email)
+      });
+    });
+
+    (data.cameras || []).forEach(cam => {
+      const cName = safeStr(cam.client || cam.clientName);
+      const key = cName.toLowerCase() || safeStr(cam.id);
+      if (!key) return;
+      const existing = map.get(key) || {};
+      map.set(key, {
+        ...existing,
+        clientName: existing.clientName || cName,
+        ip: safeStr(cam.ip) || existing.ip || '',
+        dvrUser: existing.dvrUser || safeStr(cam.camUser) || 'admin',
+        dvrPass: existing.dvrPass || safeStr(cam.camPass) || ''
+      });
+    });
+
+    return Array.from(map.values());
+  }, [data]);
 
   const handleSaveSheetsUrl = async () => {
     const cleanUrl = tempUrl.trim();
@@ -887,6 +1360,12 @@ export default function App() {
               {TABS.find(t => t.id === activeTab)?.name}
             </h2>
             <div className="flex items-center gap-3">
+              <div className="px-3.5 py-2 rounded-xl flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                <Clock size={13} />
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  Autoguardado 1m: {lastAutoSave}
+                </span>
+              </div>
               <div className={`px-4 py-2 rounded-xl flex items-center gap-2.5 border ${cloudStatus === 'online' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'}`}>
                 <div className={`w-2 h-2 rounded-full ${cloudStatus === 'online' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
                 <span className="text-[10px] font-black uppercase tracking-widest">
@@ -897,9 +1376,9 @@ export default function App() {
           </header>
 
           <div className="max-w-7xl mx-auto pb-20">
-            {activeTab === 'personal' && <EmailsModule data={data.personal} onSave={handleSave} onDelete={handleDelete} onCopy={handleCopy} showToast={showMsg} />}
-            {activeTab === 'clients' && <CCTVModule data={data.clients} onSave={handleSave} onDelete={handleDelete} onCopy={handleCopy} showToast={showMsg} />}
-            {activeTab === 'cameras' && <IPEquipModule data={data.cameras} onSave={handleSave} onDelete={handleDelete} onCopy={handleCopy} showToast={showMsg} />}
+            {activeTab === 'personal' && <EmailsModule data={data.personal} allProfiles={allProfiles} onSave={handleSave} onUpdate={handleUpdate} onDelete={handleDelete} onCopy={handleCopy} showToast={showMsg} />}
+            {activeTab === 'clients' && <CCTVModule data={data.clients} allProfiles={allProfiles} onSave={handleSave} onUpdate={handleUpdate} onDelete={handleDelete} onCopy={handleCopy} showToast={showMsg} />}
+            {activeTab === 'cameras' && <IPEquipModule data={data.cameras} allProfiles={allProfiles} onSave={handleSave} onUpdate={handleUpdate} onDelete={handleDelete} onCopy={handleCopy} showToast={showMsg} />}
           </div>
         </div>
       </main>
